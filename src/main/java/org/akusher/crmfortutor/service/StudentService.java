@@ -76,8 +76,6 @@ public class StudentService {
             User studentUser = userRepository.findById(request.getUserId())
                     .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + request.getUserId()));
             student.setUser(studentUser);
-        } else {
-            student.setUser(null);
         }
 
         StudentProfile updated = studentProfileRepository.save(student);
