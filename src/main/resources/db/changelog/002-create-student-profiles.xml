@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="002-1-create-student-profiles" author="akusher">
+        <createTable tableName="student_profiles">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_student_profiles" nullable="false"/>
+            </column>
+            <column name="user_id" type="BIGINT">
+                <constraints unique="true" uniqueConstraintName="uq_student_profiles_user_id"
+                             foreignKeyName="fk_student_profiles_user" references="users(id)"/>
+            </column>
+            <column name="tutor_id" type="BIGINT">
+                <constraints nullable="false" foreignKeyName="fk_student_profiles_tutor" references="users(id)"/>
+            </column>
+            <column name="first_name" type="VARCHAR(100)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_name" type="VARCHAR(100)"/>
+            <column name="phone" type="VARCHAR(50)"/>
+            <column name="telegram" type="VARCHAR(100)"/>
+            <column name="current_level" type="VARCHAR(100)"/>
+            <column name="hourly_rate" type="NUMERIC(10, 2)"/>
+            <column name="lesson_balance" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="notes" type="TEXT"/>
+            <column name="status" type="VARCHAR(32)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+</databaseChangeLog>
