@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,6 +21,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/homework")
+@PreAuthorize("hasRole('TUTOR')")
 @RequiredArgsConstructor
 public class HomeworkController {
 
@@ -33,6 +35,11 @@ public class HomeworkController {
     @GetMapping("/student/{studentId}")
     public ResponseEntity<List<HomeworkResponse>> getHomeworkByStudent(@PathVariable Long studentId) {
         return ResponseEntity.ok(homeworkService.getHomeworkByStudent(studentId));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<HomeworkResponse> getHomeworkById(@PathVariable Long id) {
+        return ResponseEntity.ok(homeworkService.getHomeworkById(id));
     }
 
     @PatchMapping("/{id}/status")

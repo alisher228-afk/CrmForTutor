@@ -7,6 +7,7 @@ import org.akusher.crmfortutor.dto.response.HomeworkResponse;
 import org.akusher.crmfortutor.entity.Homework;
 import org.akusher.crmfortutor.entity.HomeworkStatus;
 import org.akusher.crmfortutor.entity.Lesson;
+import org.akusher.crmfortutor.exception.BadRequestException;
 import org.akusher.crmfortutor.exception.ResourceNotFoundException;
 import org.akusher.crmfortutor.mapper.HomeworkMapper;
 import org.akusher.crmfortutor.repository.HomeworkRepository;
@@ -59,6 +60,16 @@ public class HomeworkService {
         return homeworkMapper.toResponseList(homeworks);
     }
 
+    @Transactional(readOnly = true)
+    public HomeworkResponse getHomeworkById(Long id) {
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+
+        Homework homework = homeworkRepository.findByIdAndTutorId(id, tutorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Homework not found with id: " + id));
+
+        return homeworkMapper.toResponse(homework);
+    }
+
     @Transactional
     public HomeworkResponse updateHomeworkStatus(Long id, HomeworkStatusUpdateRequest request) {
         Long tutorId = currentUserProvider.getCurrentTutorId();
@@ -66,7 +77,21 @@ public class HomeworkService {
         Homework homework = homeworkRepository.findByIdAndTutorId(id, tutorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Homework not found with id: " + id));
 
-        homework.setStatus(request.getStatus());
+        if (request.getStatus() != HomeworkStatus.REVIEWED) {
+            throw new BadRequestException("Tutor can only change homework status to REVIEWED");
+        }
+
+        if (homework.getStatus() != HomeworkStatus.SUBMITTED) {
+            if (homework.getStatus() == HomeworkStatus.ASSIGNED) {
+                throw new BadRequestException("Cannot review homework that has not been submitted yet");
+            }
+            if (homework.getStatus() == HomeworkStatus.REVIEWED) {
+                throw new BadRequestException("Homework is already reviewed");
+            }
+            throw new BadRequestException("Cannot transition homework from status " + homework.getStatus() + " to REVIEWED");
+        }
+
+        homework.setStatus(HomeworkStatus.REVIEWED);
         if (request.getStudentNotes() != null) {
             homework.setStudentNotes(request.getStudentNotes());
         }

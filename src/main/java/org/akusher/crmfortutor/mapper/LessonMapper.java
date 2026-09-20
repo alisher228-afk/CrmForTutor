@@ -5,6 +5,9 @@ import org.akusher.crmfortutor.entity.Lesson;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
+import org.akusher.crmfortutor.dto.request.LessonUpdateRequest;
+import org.mapstruct.MappingTarget;
+
 import java.util.List;
 
 @Mapper(componentModel = "spring")
@@ -17,4 +20,11 @@ public interface LessonMapper {
     LessonResponse toResponse(Lesson entity);
 
     List<LessonResponse> toResponseList(List<Lesson> entities);
+
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "tutor", ignore = true)
+    @Mapping(target = "student", ignore = true)
+    @Mapping(target = "status", ignore = true)
+    @Mapping(target = "reminderSentAt", ignore = true)
+    void updateEntityFromDto(LessonUpdateRequest request, @MappingTarget Lesson entity);
 }

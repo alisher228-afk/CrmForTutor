@@ -16,6 +16,12 @@ public interface StudentProfileRepository extends JpaRepository<StudentProfile, 
 
     Optional<StudentProfile> findByIdAndTutorId(Long id, Long tutorId);
 
+    Optional<StudentProfile> findByInviteToken(String inviteToken);
+
+    Optional<StudentProfile> findByUserId(Long userId);
+ 
+    Optional<StudentProfile> findByTelegramLinkCode(String telegramLinkCode);
+
     @Query("""
         SELECT s FROM StudentProfile s
         WHERE s.tutor.id = :tutorId

@@ -30,4 +30,11 @@ public interface HomeworkRepository extends JpaRepository<Homework, Long> {
     List<Homework> findByStudentIdAndTutorId(
             @Param("studentId") Long studentId,
             @Param("tutorId") Long tutorId);
+
+    @Query("""
+        SELECT h FROM Homework h
+        WHERE h.lesson.student.id = :studentId
+        ORDER BY h.deadline ASC NULLS LAST, h.id DESC
+    """)
+    List<Homework> findByStudentId(@Param("studentId") Long studentId);
 }

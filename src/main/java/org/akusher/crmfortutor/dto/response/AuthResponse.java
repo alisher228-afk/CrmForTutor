@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.akusher.crmfortutor.entity.Role;
 
 @Getter
 @Setter
@@ -17,4 +18,6 @@ public class AuthResponse {
 
     @Builder.Default
     private String tokenType = "Bearer";
+
+    private Role role;
 }

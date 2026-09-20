@@ -20,8 +20,10 @@
 - [🔄 Жизненные циклы и бизнес-логика](#-жизненные-циклы-и-бизнес-логика)
 - [📁 Инфраструктура файлов](#-инфраструктура-файлов)
 - [🚀 Справочник API](#-справочник-api)
+- [🤖 Интеграция с Telegram Bot API](#-интеграция-с-telegram-bot-api)
 - [🛠 Технологический стек](#-технологический-стек)
 - [⚡ Запуск и конфигурация](#-запуск-и-конфигурация)
+- [🚢 Развертывание и Docker (Production)](#-развертывание-и-docker-production)
 - [🧪 Тестирование](#-тестирование)
 - [🗺 Планы развития](#-планы-развития)
 
@@ -89,6 +91,9 @@ erDiagram
         varchar status
         varchar invite_token UK
         timestamp invite_token_expires_at
+        bigint telegram_chat_id "nullable, технический ID чата"
+        varchar telegram_link_code "nullable, 6-значный код"
+        timestamp telegram_link_code_expires_at "nullable"
     }
 
     LESSONS {
@@ -100,6 +105,7 @@ erDiagram
         varchar topic
         varchar meeting_url
         varchar status
+        timestamp reminder_sent_at "nullable"
     }
 
     PAYMENTS {
@@ -221,6 +227,13 @@ stateDiagram-v2
 | `PUT` | `/api/v1/students/{id}` | `TUTOR` | Обновление данных ученика |
 | `DELETE` | `/api/v1/students/{id}` | `TUTOR` | Удаление карточки ученика |
 | `POST` | `/api/v1/students/{id}/invite` | `TUTOR` | Генерация одноразового инвайт-токена (срок 7 дней) |
+| `POST` | `/api/v1/students/{id}/telegram-link-code` | `TUTOR` | Генерация 6-значного кода привязки Telegram (срок 15 минут) |
+
+### 🤖 Telegram Webhook (`/api/v1/telegram`)
+
+| Метод | Путь | Роль | Описание |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/v1/telegram/webhook` | Public | Прием webhook-апдейтов от Telegram Bot API и привязка чата ученика |
 
 ### 📅 Уроки и расписание (`/api/v1/lessons`)
 
@@ -273,6 +286,128 @@ stateDiagram-v2
 
 ---
 
+## 🤖 Интеграция с Telegram Bot API
+
+Система поддерживает привязку Telegram-аккаунтов учеников к их профилям в CRM для последующей отправки сервисных уведомлений (напоминания об уроках, статусы домашних заданий, изменения баланса).
+
+Поле `telegram` (username) в карточке ученика остается информационным (для справки), а технический `telegramChatId` сохраняется автоматически в результате связывания и используется для отправки сообщений через Telegram Bot API.
+
+### 1. Создание бота в Telegram
+1. Перейдите в Telegram к [@BotFather](https://t.me/BotFather).
+2. Выполните команду `/newbot` и следуйте подсказкам (задайте отображаемое имя и уникальный username бота, оканчивающийся на `bot`, например `MyTutorCrmBot`).
+3. Скопируйте полученный **HTTP API token**.
+
+### 2. Конфигурация в приложении
+Укажите полученные данные в переменных окружения или файле конфигурации:
+```env
+TELEGRAM_BOT_TOKEN=123456789:ABCDefGhIJKlmNoPQRsTUVwxyZ
+TELEGRAM_BOT_USERNAME=MyTutorCrmBot
+```
+
+В `application.yml` эти параметры маппятся на:
+```yaml
+telegram:
+  bot-token: ${TELEGRAM_BOT_TOKEN:}
+  bot-username: ${TELEGRAM_BOT_USERNAME:}
+  api-url: ${TELEGRAM_API_URL:https://api.telegram.org}
+```
+
+### 3. Сценарий привязки Telegram к профилю ученика
+1. **Генерация кода**: Репетитор в карточке ученика запрашивает код привязки:
+   ```http
+   POST /api/v1/students/{id}/telegram-link-code
+   Authorization: Bearer <TUTOR_ACCESS_TOKEN>
+   ```
+   Сервер генерирует случайный 6-значный цифровой код (время жизни — 15 минут) и сохраняет его в `StudentProfile`. В ответе возвращаются:
+   ```json
+   {
+     "studentId": 10,
+     "linkCode": "481923",
+     "code": "481923",
+     "expiresAt": "2026-09-20T12:35:00Z",
+     "botUsername": "MyTutorCrmBot"
+   }
+   ```
+2. **Передача кода ученику**: Репетитор сообщает 6-значный код ученику либо дает прямую ссылку вида `https://t.me/MyTutorCrmBot?start=481923`.
+3. **Отправка кода боту**: Ученик нажимает `Start` в боте или отправляет сообщение с кодом `481923`.
+4. **Обработка Webhook**: Telegram Bot API пересылает сообщение на эндпоинт приложения `POST /api/v1/telegram/webhook`:
+   - Сервис валидирует код и срок его действия.
+   - Записывает `chatId` в `student.telegramChatId`.
+   - Очищает `telegramLinkCode` и `telegramLinkCodeExpiresAt`.
+   - Отправляет ответное сообщение через Bot API (`sendMessage`): *"Telegram успешно привязан к вашему профилю ученика! Теперь вы будете получать уведомления."*
+
+### 4. Настройка Webhook через Telegram Bot API (Production)
+Telegram Bot API доставляет апдейты через вебхук **только на публичные HTTPS-адреса** с доверенным сертификатом.
+
+После развертывания приложения на сервере зарегистрируйте URL вебхука:
+```bash
+curl -F "url=https://your-crm-domain.com/api/v1/telegram/webhook" \
+     https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook
+```
+Успешный ответ Telegram:
+```json
+{"ok":true,"result":true,"description":"Webhook was set"}
+```
+
+Проверить статус вебхука и счетчики ошибок доставки:
+```bash
+curl https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo
+```
+
+При необходимости удалить вебхук:
+```bash
+curl https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/deleteWebhook
+```
+
+### 5. Локальная разработка и тестирование
+
+#### Вариант A: Прямой вызов `sendMessage` (без входящего Webhook)
+Если `telegramChatId` уже сохранен в профиле (или известен ваш персональный `chatId`), бэкенд может напрямую отправлять исходящие сообщения через метод:
+```java
+telegramService.sendMessage(chatId, "Тестовое сообщение из локального CRM");
+```
+Для этого достаточно только корректного `TELEGRAM_BOT_TOKEN`. Входящий webhook и белый IP не требуются.
+
+#### Вариант B: Локальная эмуляция апдейтов Telegram
+Можно проверить работу контроллера и привязку кода прямым вызовом эндпоинта через `curl`:
+```bash
+curl -X POST http://localhost:8081/api/v1/telegram/webhook \
+  -H "Content-Type: application/json" \
+  -d '{
+    "update_id": 10001,
+    "message": {
+      "message_id": 1,
+      "chat": {
+        "id": 987654321,
+        "type": "private"
+      },
+      "text": "481923"
+    }
+  }'
+```
+
+#### Вариант C: Сквозное тестирование с реальным Telegram через туннель
+Для тестирования "живого" диалога с ботом на этапе локальной разработки можно пробросить локальный порт с помощью утилит туннелирования (например, [ngrok](https://ngrok.com/)):
+```bash
+# 1. Запустить локальный туннель на порт приложения
+ngrok http 8081
+
+# 2. Установить полученный HTTPS URL в Telegram Webhook
+curl -F "url=https://<your-subdomain>.ngrok-free.app/api/v1/telegram/webhook" \
+     https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook
+```
+
+### 6. Плановые напоминания об уроках (Scheduled Job)
+В системе работает фоновая задача (`@EnableScheduling`, интервал по умолчанию — каждые 30 минут):
+- Находит запланированные уроки (`status = SCHEDULED`), время начала которых попадает в интервал **через 24 часа ± интервал джобы**, и напоминание по которым еще не отправлялось (`reminderSentAt IS NULL`).
+- Через [`NotificationService`](src/main/java/org/akusher/crmfortutor/service/NotificationService.java) формирует персональное сообщение вида:
+  > *"Завтра в 15:00 у тебя урок по теме Английский язык\nСсылка на звонок: https://meet.google.com/..."*
+- Отправляет уведомление в Telegram (если у профиля привязан `telegramChatId`).
+- Фиксирует факт отправки (`reminderSentAt = Instant.now()`), исключая повторные уведомления.
+- Отказоустойчивость: ошибка отправки для одного урока не прерывает работу джобы — остальные уроки продолжают обрабатываться в цикле.
+
+---
+
 ## 🛠 Технологический стек
 
 - **Язык программирования**: Java 21 LTS
@@ -306,6 +441,8 @@ JWT_ACCESS_EXPIRATION=900000
 JWT_REFRESH_EXPIRATION=604800000
 STORAGE_UPLOAD_DIR=./uploads
 STORAGE_MAX_FILE_SIZE=10MB
+TELEGRAM_BOT_TOKEN=123456789:ABCDefGhIJKlmNoPQRsTUVwxyZ
+TELEGRAM_BOT_USERNAME=MyTutorBot
 ```
 
 ### 2. Запуск базы данных в Docker (опционально)
@@ -329,6 +466,140 @@ docker run --name crm-postgres -e POSTGRES_DB=crm_for_tutor -e POSTGRES_USER=pos
 
 ---
 
+## 🚢 Развертывание и Docker (Production)
+
+### 1. Архитектура контейнеризации
+- **Multi-stage [`Dockerfile`](Dockerfile)**:
+  - **Build-стадия**: `maven:3.9-eclipse-temurin-21` — сборка артефакта (`mvn clean package -DskipTests`) с кэшированием зависимостей.
+  - **Runtime-стадия**: легкий образ `eclipse-temurin:21-jre`, создающий изолированную директорию `/app/uploads` и запускающий скомпилированный JAR.
+- **[`docker-compose.yml`](docker-compose.yml)**:
+  - Сервис `postgres`: PostgreSQL 16 Alpine с volume `postgres_data` и встроенным healthcheck.
+  - Сервис `app`: Spring Boot бэкенд с профилем `prod`, зависимостью от `postgres` (`service_healthy`) и volume `app_uploads`.
+  - **Персистентность файлов**: том `app_uploads` монтируется в `storage.upload-dir` (`/app/uploads`). Без этого тома вложения к домашним заданиям пропадут при перезапуске или обновлении контейнера.
+
+### 2. Локальный запуск через Docker Compose
+1. Скопируйте шаблон переменных окружения:
+   ```bash
+   cp .env.example .env
+   ```
+2. При необходимости отредактируйте `.env` (задайте пароль БД, токен бота Telegram).
+3. Соберите и запустите контейнеры:
+   ```bash
+   docker compose up --build -d
+   ```
+4. Проверьте состояние сервисов и логи:
+   ```bash
+   docker compose ps
+   docker compose logs -f app
+   ```
+5. Сервер будет доступен по адресу: `http://localhost:8081` (Swagger UI: `http://localhost:8081/swagger-ui.html`).
+6. Остановка контейнеров:
+   ```bash
+   docker compose down          # сохраняет volumes с БД и файлами
+   docker compose down -v       # удаляет контейнеры вместе с volumes
+   ```
+
+### 3. Деплой на внешние платформы (Railway / Render / Fly.io / VPS)
+
+#### Обязательные переменные окружения (Environment Variables)
+При развертывании задайте следующие переменные:
+
+| Переменная | Описание | Пример значения |
+| :--- | :--- | :--- |
+| `SPRING_PROFILES_ACTIVE` | Активный профиль Spring | `prod` |
+| `DB_URL` | JDBC URL к базе данных | `jdbc:postgresql://<host>:<port>/<dbname>` |
+| `DB_USERNAME` | Пользователь PostgreSQL | `postgres` |
+| `DB_PASSWORD` | Пароль к PostgreSQL | `strong_db_password` |
+| `JWT_SECRET` | 256-битный секрет подписи JWT | `404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970` |
+| `JWT_ACCESS_EXPIRATION` | Срок жизни access-токена (мс) | `900000` (15 минут) |
+| `JWT_REFRESH_EXPIRATION` | Срок жизни refresh-токена (мс) | `604800000` (7 дней) |
+| `STORAGE_UPLOAD_DIR` | Путь к директории хранения файлов | `/app/uploads` |
+| `STORAGE_MAX_FILE_SIZE` | Максимальный размер файла | `10MB` |
+| `SERVER_PORT` | Порт приложения | `8081` (или `$PORT` платформы) |
+| `TELEGRAM_BOT_TOKEN` | Токен бота от `@BotFather` | `123456789:ABCDefGhIJKlmNoPQRsTUVwxyZ` |
+| `TELEGRAM_BOT_USERNAME` | Имя пользователя бота | `MyTutorCrmBot` |
+| `TELEGRAM_API_URL` | Базовый URL Bot API | `https://api.telegram.org` |
+| `REMINDERS_INTERVAL_MINUTES` | Интервал выборки напоминаний | `30` |
+| `REMINDERS_CRON` | Расписание джобы напоминаний | `0 */30 * * * *` |
+
+#### Особенности для PaaS (Railway / Render / Fly.io)
+1. **База данных**: Подключите Managed PostgreSQL плагин/сервис платформы и передайте выданный JDBC URL и учетные данные в `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`.
+2. **Персистентное хранилище файлов (Важно)**: Контейнеры на PaaS эфемерны — при каждом новом деплое файловая система сбрасывается.
+   - **Render**: Создайте **Disk** (например, размер 1–5 GB) и примонтируйте его в точку `/app/uploads`.
+   - **Fly.io**: Создайте том `fly volumes create uploads_data --size 1` и укажите в `fly.toml`:
+     ```toml
+     [mounts]
+       source = "uploads_data"
+       destination = "/app/uploads"
+     ```
+   - **Railway**: Подключите **Volume** к сервису бэкенда с точкой монтирования `/app/uploads`.
+
+#### Деплой на собственный VPS
+1. Установите Docker и Docker Compose:
+   ```bash
+   sudo apt update && sudo apt install -y docker.io docker-compose-plugin
+   ```
+2. Склонируйте репозиторий и настройте `.env`:
+   ```bash
+   git clone https://github.com/your-username/CrmForTutor.git
+   cd CrmForTutor
+   cp .env.example .env
+   nano .env
+   ```
+3. Запустите стек:
+   ```bash
+   docker compose up --build -d
+   ```
+4. Настройте Nginx как Reverse Proxy с получением бесплатного SSL-сертификата (Let's Encrypt):
+   ```nginx
+   server {
+       server_name crm.yourdomain.com;
+
+       client_max_body_size 15M;
+
+       location / {
+           proxy_pass http://127.0.0.1:8081;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
+   Получение SSL: `sudo certbot --nginx -d crm.yourdomain.com`.
+
+### 4. Настройка Telegram Webhook после деплоя
+
+Telegram Bot API отправляет события **только на публичные HTTPS-адреса**.
+
+1. **Регистрация Webhook**:
+   После того как бэкенд стал доступен по HTTPS, вызовите метод `setWebhook`:
+   ```bash
+   curl -F "url=https://crm.yourdomain.com/api/v1/telegram/webhook" \
+        https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook
+   ```
+   Ожидаемый ответ:
+   ```json
+   {"ok": true, "result": true, "description": "Webhook was set"}
+   ```
+
+2. **Проверка состояния Webhook**:
+   ```bash
+   curl https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo
+   ```
+   В выводе должно быть:
+   - `"url": "https://crm.yourdomain.com/api/v1/telegram/webhook"`
+   - `"has_custom_certificate": false`
+   - `"pending_update_count": 0`
+   - `"last_error_message"` отсутствует (или пусто).
+
+3. **Удаление Webhook (при необходимости)**:
+   ```bash
+   curl https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/deleteWebhook
+   ```
+
+---
+
 ## 🧪 Тестирование
 
 Проект содержит модульные и интеграционные тесты, покрывающие контроллеры, сервисы, проверки безопасности и права доступа.
@@ -347,7 +618,7 @@ docker run --name crm-postgres -e POSTGRES_DB=crm_for_tutor -e POSTGRES_USER=pos
 
 ## 🗺 Планы развития
 
-- [ ] Интеграция с Telegram Bot для уведомлений о новых занятиях и сдаче заданий.
+- [x] Интеграция с Telegram Bot для уведомлений (привязка чата через 6-значный код, прием Webhook и отправка через Bot API sendMessage).
 - [ ] Синхронизация расписания с Google Calendar / Yandex Calendar (iCal).
 - [ ] Аутентификация через OAuth2 / Google Sign-In.
 - [ ] Подключение облачного хранилища S3 (MinIO / AWS S3 / Yandex Object Storage) через реализацию `FileStorageService`.

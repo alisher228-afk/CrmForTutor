@@ -1,12 +1,16 @@
 package org.akusher.crmfortutor.service;
 
 import lombok.RequiredArgsConstructor;
+import org.akusher.crmfortutor.config.TelegramProperties;
 import org.akusher.crmfortutor.dto.request.StudentCreateRequest;
 import org.akusher.crmfortutor.dto.request.StudentUpdateRequest;
+import org.akusher.crmfortutor.dto.response.StudentInviteResponse;
 import org.akusher.crmfortutor.dto.response.StudentResponse;
+import org.akusher.crmfortutor.dto.response.TelegramLinkCodeResponse;
 import org.akusher.crmfortutor.entity.StudentProfile;
 import org.akusher.crmfortutor.entity.StudentStatus;
 import org.akusher.crmfortutor.entity.User;
+import org.akusher.crmfortutor.exception.BadRequestException;
 import org.akusher.crmfortutor.exception.ResourceNotFoundException;
 import org.akusher.crmfortutor.mapper.StudentMapper;
 import org.akusher.crmfortutor.repository.StudentProfileRepository;
@@ -17,6 +21,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Optional;
+import java.util.Random;
+import java.util.UUID;
+
 @Service
 @RequiredArgsConstructor
 public class StudentService {
@@ -25,6 +36,7 @@ public class StudentService {
     private final UserRepository userRepository;
     private final CurrentUserProvider currentUserProvider;
     private final StudentMapper studentMapper;
+    private final TelegramProperties telegramProperties;
 
     @Transactional(readOnly = true)
     public Page<StudentResponse> getStudents(String search, StudentStatus status, Pageable pageable) {
@@ -90,5 +102,63 @@ public class StudentService {
 
         student.setStatus(StudentStatus.ARCHIVED);
         studentProfileRepository.save(student);
+    }
+
+    @Transactional
+    public StudentInviteResponse createInviteToken(Long id) {
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+        StudentProfile student = studentProfileRepository.findByIdAndTutorId(id, tutorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + id));
+
+        if (student.getUser() != null) {
+            throw new BadRequestException("Student is already linked to a user account");
+        }
+
+        String token = UUID.randomUUID().toString();
+        Instant expiresAt = Instant.now().plus(7, ChronoUnit.DAYS);
+
+        student.setInviteToken(token);
+        student.setInviteTokenExpiresAt(expiresAt);
+        studentProfileRepository.save(student);
+
+        return StudentInviteResponse.builder()
+                .studentId(student.getId())
+                .inviteToken(token)
+                .expiresAt(expiresAt)
+                .build();
+    }
+
+    @Transactional
+    public TelegramLinkCodeResponse generateTelegramLinkCode(Long id) {
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+        StudentProfile student = studentProfileRepository.findByIdAndTutorId(id, tutorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + id));
+
+        String code = generateUniqueTelegramLinkCode();
+        Instant expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES);
+
+        student.setTelegramLinkCode(code);
+        student.setTelegramLinkCodeExpiresAt(expiresAt);
+        studentProfileRepository.save(student);
+
+        return TelegramLinkCodeResponse.builder()
+                .studentId(student.getId())
+                .linkCode(code)
+                .expiresAt(expiresAt)
+                .botUsername(telegramProperties != null ? telegramProperties.getBotUsername() : null)
+                .build();
+    }
+
+    private String generateUniqueTelegramLinkCode() {
+        Random random = new SecureRandom();
+        for (int i = 0; i < 100; i++) {
+            String code = String.format("%06d", random.nextInt(1_000_000));
+            Optional<StudentProfile> existing = studentProfileRepository.findByTelegramLinkCode(code);
+            if (existing.isEmpty() || existing.get().getTelegramLinkCodeExpiresAt() == null
+                    || existing.get().getTelegramLinkCodeExpiresAt().isBefore(Instant.now())) {
+                return code;
+            }
+        }
+        throw new IllegalStateException("Failed to generate a unique telegram link code");
     }
 }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="008-1-add-telegram-chat-id" author="akusher">
+        <addColumn tableName="student_profiles">
+            <column name="telegram_chat_id" type="BIGINT"/>
+            <column name="telegram_link_code" type="VARCHAR(16)"/>
+            <column name="telegram_link_code_expires_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

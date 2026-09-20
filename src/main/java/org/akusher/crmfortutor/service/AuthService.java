@@ -4,11 +4,14 @@ import lombok.RequiredArgsConstructor;
 import org.akusher.crmfortutor.dto.request.LoginRequest;
 import org.akusher.crmfortutor.dto.request.RefreshTokenRequest;
 import org.akusher.crmfortutor.dto.request.RegisterRequest;
+import org.akusher.crmfortutor.dto.request.StudentRegisterRequest;
 import org.akusher.crmfortutor.dto.response.AuthResponse;
 import org.akusher.crmfortutor.entity.Role;
+import org.akusher.crmfortutor.entity.StudentProfile;
 import org.akusher.crmfortutor.entity.User;
 import org.akusher.crmfortutor.exception.BadRequestException;
 import org.akusher.crmfortutor.exception.ResourceNotFoundException;
+import org.akusher.crmfortutor.repository.StudentProfileRepository;
 import org.akusher.crmfortutor.repository.UserRepository;
 import org.akusher.crmfortutor.security.JwtTokenProvider;
 import org.akusher.crmfortutor.security.UserPrincipal;
@@ -26,6 +29,7 @@ import java.time.Instant;
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final StudentProfileRepository studentProfileRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final AuthenticationManager authenticationManager;
@@ -53,6 +57,51 @@ public class AuthService {
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .tokenType("Bearer")
+                .role(user.getRole())
+                .build();
+    }
+
+    @Transactional
+    public AuthResponse registerStudent(StudentRegisterRequest request) {
+        String inviteToken = request.getInviteToken() != null ? request.getInviteToken().trim() : "";
+        StudentProfile student = studentProfileRepository.findByInviteToken(inviteToken)
+                .orElseThrow(() -> new BadRequestException("Invalid invite token"));
+
+        if (student.getUser() != null) {
+            throw new BadRequestException("Invite token has already been used");
+        }
+
+        if (student.getInviteTokenExpiresAt() == null || student.getInviteTokenExpiresAt().isBefore(Instant.now())) {
+            throw new BadRequestException("Invite token has expired");
+        }
+
+        String email = request.getEmail().trim().toLowerCase();
+        if (userRepository.existsByEmail(email)) {
+            throw new BadRequestException("User with email '" + email + "' already exists");
+        }
+
+        User user = User.builder()
+                .email(email)
+                .password(passwordEncoder.encode(request.getPassword()))
+                .role(Role.ROLE_STUDENT)
+                .createdAt(Instant.now())
+                .build();
+
+        user = userRepository.save(user);
+
+        student.setUser(user);
+        student.setInviteToken(null);
+        student.setInviteTokenExpiresAt(null);
+        studentProfileRepository.save(student);
+
+        String accessToken = tokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
+        String refreshToken = tokenProvider.generateRefreshToken(user.getEmail());
+
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .tokenType("Bearer")
+                .role(user.getRole())
                 .build();
     }
 
@@ -72,6 +121,7 @@ public class AuthService {
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .tokenType("Bearer")
+                .role(principal.getRole())
                 .build();
     }
 
@@ -93,6 +143,7 @@ public class AuthService {
                 .accessToken(newAccessToken)
                 .refreshToken(newRefreshToken)
                 .tokenType("Bearer")
+                .role(user.getRole())
                 .build();
     }
 }

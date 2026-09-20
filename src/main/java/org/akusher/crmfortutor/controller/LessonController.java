@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.akusher.crmfortutor.dto.request.LessonCreateRequest;
 import org.akusher.crmfortutor.dto.request.LessonStatusUpdateRequest;
+import org.akusher.crmfortutor.dto.request.LessonUpdateRequest;
 import org.akusher.crmfortutor.dto.response.LessonResponse;
 import org.akusher.crmfortutor.service.LessonService;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -24,6 +26,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/lessons")
+@PreAuthorize("hasRole('TUTOR')")
 @RequiredArgsConstructor
 public class LessonController {
 
@@ -36,9 +39,21 @@ public class LessonController {
         return ResponseEntity.ok(lessonService.getLessons(from, to));
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<LessonResponse> getLessonById(@PathVariable Long id) {
+        return ResponseEntity.ok(lessonService.getLessonById(id));
+    }
+
     @PostMapping
     public ResponseEntity<LessonResponse> createLesson(@Valid @RequestBody LessonCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(lessonService.createLesson(request));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<LessonResponse> updateLesson(
+            @PathVariable Long id,
+            @Valid @RequestBody LessonUpdateRequest request) {
+        return ResponseEntity.ok(lessonService.updateLesson(id, request));
     }
 
     @PutMapping("/{id}/status")

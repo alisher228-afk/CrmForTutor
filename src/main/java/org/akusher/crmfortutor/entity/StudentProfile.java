@@ -19,6 +19,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 @Entity
 @Table(name = "student_profiles")
@@ -69,4 +70,19 @@ public class StudentProfile {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private StudentStatus status;
+
+    @Column(name = "invite_token", unique = true)
+    private String inviteToken;
+
+    @Column(name = "invite_token_expires_at")
+    private Instant inviteTokenExpiresAt;
+
+    @Column(name = "telegram_chat_id")
+    private Long telegramChatId;
+
+    @Column(name = "telegram_link_code", length = 16)
+    private String telegramLinkCode;
+
+    @Column(name = "telegram_link_code_expires_at")
+    private Instant telegramLinkCodeExpiresAt;
 }

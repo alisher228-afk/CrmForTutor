@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.akusher.crmfortutor.dto.request.LoginRequest;
 import org.akusher.crmfortutor.dto.request.RefreshTokenRequest;
 import org.akusher.crmfortutor.dto.request.RegisterRequest;
+import org.akusher.crmfortutor.dto.request.StudentRegisterRequest;
 import org.akusher.crmfortutor.dto.response.AuthResponse;
 import org.akusher.crmfortutor.service.AuthService;
 import org.springframework.http.HttpStatus;
@@ -24,6 +25,11 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(request));
+    }
+
+    @PostMapping("/register-student")
+    public ResponseEntity<AuthResponse> registerStudent(@Valid @RequestBody StudentRegisterRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(authService.registerStudent(request));
     }
 
     @PostMapping("/login")

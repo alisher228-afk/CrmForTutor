@@ -13,6 +13,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.time.Instant;
 import java.util.stream.Collectors;
@@ -66,6 +67,13 @@ public class GlobalExceptionHandler {
         String message = String.format("Required request parameter '%s' is missing", ex.getParameterName());
         log.warn("Missing parameter: {}", message);
         return buildResponse(HttpStatus.BAD_REQUEST, message, request.getRequestURI());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSizeExceededException(
+            MaxUploadSizeExceededException ex, HttpServletRequest request) {
+        log.warn("Max upload size exceeded: {}", ex.getMessage());
+        return buildResponse(HttpStatus.BAD_REQUEST, "File size exceeds maximum allowed upload limit", request.getRequestURI());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

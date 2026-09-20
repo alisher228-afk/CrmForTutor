@@ -2,6 +2,11 @@ spring:
   application:
     name: CrmForTutor
 
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: ${STORAGE_MAX_FILE_SIZE:10MB}
+      max-request-size: ${STORAGE_MAX_REQUEST_SIZE:10MB}
 
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5455/crm_for_tutor}
@@ -23,6 +28,10 @@ spring:
     enabled: true
     change-log: classpath:db/changelog/db.changelog-master.xml
 
+storage:
+  upload-dir: ${STORAGE_UPLOAD_DIR:./uploads}
+  max-file-size: ${STORAGE_MAX_FILE_SIZE:10MB}
+
 jwt:
   secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
   access-expiration: ${JWT_ACCESS_EXPIRATION:900000} # 15 minutes (in ms)
@@ -30,3 +39,12 @@ jwt:
 
 server:
   port: ${SERVER_PORT:8081}
+
+telegram:
+  bot-token: ${TELEGRAM_BOT_TOKEN:}
+  bot-username: ${TELEGRAM_BOT_USERNAME:}
+  api-url: ${TELEGRAM_API_URL:https://api.telegram.org}
+
+reminders:
+  interval-minutes: ${REMINDERS_INTERVAL_MINUTES:30}
+  cron: ${REMINDERS_CRON:0 */30 * * * *}

@@ -1,0 +1,57 @@
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: ${STORAGE_MAX_FILE_SIZE:10MB}
+      max-request-size: ${STORAGE_MAX_REQUEST_SIZE:10MB}
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.xml
+
+storage:
+  upload-dir: ${STORAGE_UPLOAD_DIR:/app/uploads}
+  max-file-size: ${STORAGE_MAX_FILE_SIZE:10MB}
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-expiration: ${JWT_ACCESS_EXPIRATION:900000}
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+
+server:
+  port: ${SERVER_PORT:8081}
+
+telegram:
+  bot-token: ${TELEGRAM_BOT_TOKEN:}
+  bot-username: ${TELEGRAM_BOT_USERNAME:}
+  api-url: ${TELEGRAM_API_URL:https://api.telegram.org}
+
+reminders:
+  interval-minutes: ${REMINDERS_INTERVAL_MINUTES:30}
+  cron: ${REMINDERS_CRON:0 */30 * * * *}
+
+logging:
+  level:
+    root: INFO
+    org.akusher.crmfortutor: INFO
+    org.springframework.web: WARN
+    org.hibernate: ERROR

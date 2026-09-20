@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.akusher.crmfortutor.entity.LessonStatus;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 @Getter
@@ -25,4 +26,5 @@ public class LessonResponse {
     private LessonStatus status;
     private String topic;
     private String meetingUrl;
+    private Instant reminderSentAt;
 }

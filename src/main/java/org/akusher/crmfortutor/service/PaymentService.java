@@ -2,6 +2,7 @@ package org.akusher.crmfortutor.service;
 
 import lombok.RequiredArgsConstructor;
 import org.akusher.crmfortutor.dto.request.PaymentCreateRequest;
+import org.akusher.crmfortutor.dto.request.PaymentUpdateRequest;
 import org.akusher.crmfortutor.dto.response.IncomeResponse;
 import org.akusher.crmfortutor.dto.response.PaymentResponse;
 import org.akusher.crmfortutor.entity.Payment;
@@ -53,6 +54,51 @@ public class PaymentService {
         }
 
         return paymentMapper.toResponse(savedPayment);
+    }
+
+    @Transactional
+    public PaymentResponse updatePayment(Long id, PaymentUpdateRequest request) {
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+
+        Payment payment = paymentRepository.findByIdAndTutorId(id, tutorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + id));
+
+        int oldLessonsCount = payment.getLessonsCount() != null ? payment.getLessonsCount() : 0;
+        int newLessonsCount = request.getLessonsCount() != null ? request.getLessonsCount() : 0;
+        int delta = newLessonsCount - oldLessonsCount;
+
+        if (delta != 0) {
+            StudentProfile student = payment.getStudent();
+            int currentBalance = student.getLessonBalance() != null ? student.getLessonBalance() : 0;
+            student.setLessonBalance(currentBalance + delta);
+            studentProfileRepository.save(student);
+        }
+
+        payment.setAmount(request.getAmount());
+        payment.setLessonsCount(request.getLessonsCount());
+        payment.setPaymentDate(request.getPaymentDate());
+        payment.setNotes(request.getNotes());
+
+        Payment updatedPayment = paymentRepository.save(payment);
+        return paymentMapper.toResponse(updatedPayment);
+    }
+
+    @Transactional
+    public void deletePayment(Long id) {
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+
+        Payment payment = paymentRepository.findByIdAndTutorId(id, tutorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + id));
+
+        int lessonsCount = payment.getLessonsCount() != null ? payment.getLessonsCount() : 0;
+        if (lessonsCount != 0) {
+            StudentProfile student = payment.getStudent();
+            int currentBalance = student.getLessonBalance() != null ? student.getLessonBalance() : 0;
+            student.setLessonBalance(currentBalance - lessonsCount);
+            studentProfileRepository.save(student);
+        }
+
+        paymentRepository.delete(payment);
     }
 
     @Transactional(readOnly = true)

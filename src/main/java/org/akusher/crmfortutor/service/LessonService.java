@@ -3,6 +3,7 @@ package org.akusher.crmfortutor.service;
 import lombok.RequiredArgsConstructor;
 import org.akusher.crmfortutor.dto.request.LessonCreateRequest;
 import org.akusher.crmfortutor.dto.request.LessonStatusUpdateRequest;
+import org.akusher.crmfortutor.dto.request.LessonUpdateRequest;
 import org.akusher.crmfortutor.dto.response.LessonResponse;
 import org.akusher.crmfortutor.entity.Lesson;
 import org.akusher.crmfortutor.entity.LessonStatus;
@@ -44,6 +45,14 @@ public class LessonService {
         return lessonMapper.toResponseList(lessons);
     }
 
+    @Transactional(readOnly = true)
+    public LessonResponse getLessonById(Long id) {
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+        Lesson lesson = lessonRepository.findByIdAndTutorId(id, tutorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson not found with id: " + id));
+        return lessonMapper.toResponse(lesson);
+    }
+
     @Transactional
     public LessonResponse createLesson(LessonCreateRequest request) {
         Long tutorId = currentUserProvider.getCurrentTutorId();
@@ -70,6 +79,26 @@ public class LessonService {
 
         Lesson saved = lessonRepository.save(lesson);
         return lessonMapper.toResponse(saved);
+    }
+
+    @Transactional
+    public LessonResponse updateLesson(Long id, LessonUpdateRequest request) {
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+
+        if (request.getEndTime().isBefore(request.getStartTime()) || request.getEndTime().isEqual(request.getStartTime())) {
+            throw new BadRequestException("Lesson end time must be after start time");
+        }
+
+        Lesson lesson = lessonRepository.findByIdAndTutorId(id, tutorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lesson not found with id: " + id));
+
+        lesson.setStartTime(request.getStartTime());
+        lesson.setEndTime(request.getEndTime());
+        lesson.setTopic(request.getTopic());
+        lesson.setMeetingUrl(request.getMeetingUrl());
+
+        Lesson updated = lessonRepository.save(lesson);
+        return lessonMapper.toResponse(updated);
     }
 
     @Transactional

@@ -17,6 +17,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 @Entity
@@ -55,4 +56,7 @@ public class Lesson {
 
     @Column(name = "meeting_url", length = 500)
     private String meetingUrl;
+
+    @Column(name = "reminder_sent_at")
+    private Instant reminderSentAt;
 }

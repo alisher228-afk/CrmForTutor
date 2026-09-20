@@ -4,7 +4,9 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.akusher.crmfortutor.dto.request.StudentCreateRequest;
 import org.akusher.crmfortutor.dto.request.StudentUpdateRequest;
+import org.akusher.crmfortutor.dto.response.StudentInviteResponse;
 import org.akusher.crmfortutor.dto.response.StudentResponse;
+import org.akusher.crmfortutor.dto.response.TelegramLinkCodeResponse;
 import org.akusher.crmfortutor.entity.StudentStatus;
 import org.akusher.crmfortutor.service.StudentService;
 import org.springframework.data.domain.Page;
@@ -16,6 +18,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/students")
+@PreAuthorize("hasRole('TUTOR')")
 @RequiredArgsConstructor
 public class StudentController {
 
@@ -45,6 +49,16 @@ public class StudentController {
     @GetMapping("/{id}")
     public ResponseEntity<StudentResponse> getStudentById(@PathVariable Long id) {
         return ResponseEntity.ok(studentService.getStudentById(id));
+    }
+
+    @PostMapping("/{id}/invite")
+    public ResponseEntity<StudentInviteResponse> createInviteToken(@PathVariable Long id) {
+        return ResponseEntity.ok(studentService.createInviteToken(id));
+    }
+
+    @PostMapping("/{id}/telegram-link-code")
+    public ResponseEntity<TelegramLinkCodeResponse> generateTelegramLinkCode(@PathVariable Long id) {
+        return ResponseEntity.ok(studentService.generateTelegramLinkCode(id));
     }
 
     @PutMapping("/{id}")

@@ -10,5 +10,9 @@
     <include file="003-create-lessons.xml" relativeToChangelogFile="true"/>
     <include file="004-create-payments.xml" relativeToChangelogFile="true"/>
     <include file="005-create-homework.xml" relativeToChangelogFile="true"/>
+    <include file="006-add-student-invite.xml" relativeToChangelogFile="true"/>
+    <include file="007-create-attachments.xml" relativeToChangelogFile="true"/>
+    <include file="008-add-telegram-chat-id.xml" relativeToChangelogFile="true"/>
+    <include file="009-add-lesson-reminder.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
