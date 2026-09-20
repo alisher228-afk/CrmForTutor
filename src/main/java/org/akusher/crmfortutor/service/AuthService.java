@@ -132,6 +132,11 @@ public class AuthService {
             throw new BadRequestException("Invalid or expired refresh token");
         }
 
+        String tokenType = tokenProvider.getTokenType(token);
+        if (!"REFRESH".equals(tokenType)) {
+            throw new BadRequestException("Invalid refresh token");
+        }
+
         String email = tokenProvider.getEmailFromToken(token);
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found for provided token"));

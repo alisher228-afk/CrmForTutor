@@ -1,5 +1,7 @@
 package org.akusher.crmfortutor.service;
 
+import org.akusher.crmfortutor.dto.request.LessonCreateRequest;
+import org.akusher.crmfortutor.dto.request.LessonStatusUpdateRequest;
 import org.akusher.crmfortutor.dto.request.LessonUpdateRequest;
 import org.akusher.crmfortutor.dto.response.LessonResponse;
 import org.akusher.crmfortutor.entity.Lesson;
@@ -27,6 +29,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -48,13 +51,15 @@ class LessonServiceTest {
     private LessonService lessonService;
 
     private Long tutorId;
+    private User tutor;
+    private StudentProfile student;
     private Lesson lesson;
 
     @BeforeEach
     void setUp() {
         tutorId = 1L;
-        User tutor = User.builder().id(tutorId).email("tutor@example.com").build();
-        StudentProfile student = StudentProfile.builder().id(2L).firstName("Ivan").lastName("Petrov").build();
+        tutor = User.builder().id(tutorId).email("tutor@example.com").build();
+        student = StudentProfile.builder().id(2L).firstName("Ivan").lastName("Petrov").lessonBalance(5).build();
 
         lesson = Lesson.builder()
                 .id(10L)
@@ -103,14 +108,78 @@ class LessonServiceTest {
     }
 
     @Test
+    @DisplayName("createLesson - success when no time conflict")
+    void createLesson_Success() {
+        LocalDateTime start = LocalDateTime.of(2026, 9, 22, 10, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 9, 22, 11, 0);
+        LessonCreateRequest request = LessonCreateRequest.builder()
+                .studentId(2L)
+                .startTime(start)
+                .endTime(end)
+                .topic("Trigonometry")
+                .meetingUrl("https://meet.google.com/new")
+                .build();
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(studentProfileRepository.findByIdAndTutorId(2L, tutorId)).thenReturn(Optional.of(student));
+        when(userRepository.findById(tutorId)).thenReturn(Optional.of(tutor));
+        when(lessonRepository.existsConflictingLesson(2L, start, end, null)).thenReturn(false);
+        when(lessonRepository.save(any(Lesson.class))).thenAnswer(inv -> {
+            Lesson l = inv.getArgument(0);
+            l.setId(100L);
+            return l;
+        });
+
+        LessonResponse response = LessonResponse.builder()
+                .id(100L)
+                .studentId(2L)
+                .topic("Trigonometry")
+                .status(LessonStatus.SCHEDULED)
+                .build();
+        when(lessonMapper.toResponse(any(Lesson.class))).thenReturn(response);
+
+        LessonResponse result = lessonService.createLesson(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(100L);
+        assertThat(result.getTopic()).isEqualTo("Trigonometry");
+        verify(lessonRepository).save(any(Lesson.class));
+    }
+
+    @Test
+    @DisplayName("createLesson - throws BadRequestException when time conflict exists")
+    void createLesson_ThrowsBadRequestException_WhenTimeConflict() {
+        LocalDateTime start = LocalDateTime.of(2026, 9, 22, 10, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 9, 22, 11, 0);
+        LessonCreateRequest request = LessonCreateRequest.builder()
+                .studentId(2L)
+                .startTime(start)
+                .endTime(end)
+                .topic("Trigonometry")
+                .build();
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(studentProfileRepository.findByIdAndTutorId(2L, tutorId)).thenReturn(Optional.of(student));
+        when(userRepository.findById(tutorId)).thenReturn(Optional.of(tutor));
+        when(lessonRepository.existsConflictingLesson(2L, start, end, null)).thenReturn(true);
+
+        assertThatThrownBy(() -> lessonService.createLesson(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("На это время у ученика уже запланирован урок");
+
+        verify(lessonRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("updateLesson - success")
     void updateLesson_Success() {
         when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
         when(lessonRepository.findByIdAndTutorId(10L, tutorId)).thenReturn(Optional.of(lesson));
-        when(lessonRepository.save(any(Lesson.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
         LocalDateTime newStart = LocalDateTime.of(2026, 9, 21, 14, 0);
         LocalDateTime newEnd = LocalDateTime.of(2026, 9, 21, 15, 30);
+        when(lessonRepository.existsConflictingLesson(2L, newStart, newEnd, 10L)).thenReturn(false);
+        when(lessonRepository.save(any(Lesson.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
         LessonUpdateRequest request = LessonUpdateRequest.builder()
                 .startTime(newStart)
                 .endTime(newEnd)
@@ -135,6 +204,28 @@ class LessonServiceTest {
         assertThat(lesson.getTopic()).isEqualTo("Geometry");
         assertThat(lesson.getMeetingUrl()).isEqualTo("https://zoom.us/j/123");
         verify(lessonRepository).save(lesson);
+    }
+
+    @Test
+    @DisplayName("updateLesson - throws BadRequestException when time conflict exists")
+    void updateLesson_ThrowsBadRequestException_WhenTimeConflict() {
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(lessonRepository.findByIdAndTutorId(10L, tutorId)).thenReturn(Optional.of(lesson));
+        LocalDateTime newStart = LocalDateTime.of(2026, 9, 21, 14, 0);
+        LocalDateTime newEnd = LocalDateTime.of(2026, 9, 21, 15, 30);
+        when(lessonRepository.existsConflictingLesson(2L, newStart, newEnd, 10L)).thenReturn(true);
+
+        LessonUpdateRequest request = LessonUpdateRequest.builder()
+                .startTime(newStart)
+                .endTime(newEnd)
+                .topic("Geometry")
+                .build();
+
+        assertThatThrownBy(() -> lessonService.updateLesson(10L, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("На это время у ученика уже запланирован урок");
+
+        verify(lessonRepository, never()).save(any());
     }
 
     @Test
@@ -184,5 +275,167 @@ class LessonServiceTest {
         assertThatThrownBy(() -> lessonService.updateLesson(10L, request))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Lesson not found with id: 10");
+    }
+
+    @Test
+    @DisplayName("updateLessonStatus - SCHEDULED to COMPLETED decrements balance")
+    void updateLessonStatus_ScheduledToCompleted_DecrementsBalance() {
+        student.setLessonBalance(5);
+        lesson.setStatus(LessonStatus.SCHEDULED);
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(lessonRepository.findByIdAndTutorId(10L, tutorId)).thenReturn(Optional.of(lesson));
+        when(lessonRepository.save(any(Lesson.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        LessonStatusUpdateRequest request = LessonStatusUpdateRequest.builder()
+                .status(LessonStatus.COMPLETED)
+                .build();
+
+        lessonService.updateLessonStatus(10L, request);
+
+        assertThat(student.getLessonBalance()).isEqualTo(4);
+        assertThat(lesson.getStatus()).isEqualTo(LessonStatus.COMPLETED);
+        verify(studentProfileRepository).save(student);
+        verify(lessonRepository).save(lesson);
+    }
+
+    @Test
+    @DisplayName("updateLessonStatus - COMPLETED to COMPLETED is idempotent (no balance change)")
+    void updateLessonStatus_CompletedToCompleted_Idempotent() {
+        student.setLessonBalance(5);
+        lesson.setStatus(LessonStatus.COMPLETED);
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(lessonRepository.findByIdAndTutorId(10L, tutorId)).thenReturn(Optional.of(lesson));
+        when(lessonRepository.save(any(Lesson.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        LessonStatusUpdateRequest request = LessonStatusUpdateRequest.builder()
+                .status(LessonStatus.COMPLETED)
+                .build();
+
+        lessonService.updateLessonStatus(10L, request);
+
+        assertThat(student.getLessonBalance()).isEqualTo(5);
+        verify(studentProfileRepository, never()).save(any());
+        verify(lessonRepository).save(lesson);
+    }
+
+    @Test
+    @DisplayName("updateLessonStatus - COMPLETED to CANCELLED_BY_STUDENT increments balance")
+    void updateLessonStatus_CompletedToCancelledByStudent_IncrementsBalance() {
+        student.setLessonBalance(3);
+        lesson.setStatus(LessonStatus.COMPLETED);
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(lessonRepository.findByIdAndTutorId(10L, tutorId)).thenReturn(Optional.of(lesson));
+        when(lessonRepository.save(any(Lesson.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        LessonStatusUpdateRequest request = LessonStatusUpdateRequest.builder()
+                .status(LessonStatus.CANCELLED_BY_STUDENT)
+                .build();
+
+        lessonService.updateLessonStatus(10L, request);
+
+        assertThat(student.getLessonBalance()).isEqualTo(4);
+        assertThat(lesson.getStatus()).isEqualTo(LessonStatus.CANCELLED_BY_STUDENT);
+        verify(studentProfileRepository).save(student);
+        verify(lessonRepository).save(lesson);
+    }
+
+    @Test
+    @DisplayName("updateLessonStatus - COMPLETED to CANCELLED_BY_TUTOR increments balance")
+    void updateLessonStatus_CompletedToCancelledByTutor_IncrementsBalance() {
+        student.setLessonBalance(3);
+        lesson.setStatus(LessonStatus.COMPLETED);
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(lessonRepository.findByIdAndTutorId(10L, tutorId)).thenReturn(Optional.of(lesson));
+        when(lessonRepository.save(any(Lesson.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        LessonStatusUpdateRequest request = LessonStatusUpdateRequest.builder()
+                .status(LessonStatus.CANCELLED_BY_TUTOR)
+                .build();
+
+        lessonService.updateLessonStatus(10L, request);
+
+        assertThat(student.getLessonBalance()).isEqualTo(4);
+        assertThat(lesson.getStatus()).isEqualTo(LessonStatus.CANCELLED_BY_TUTOR);
+        verify(studentProfileRepository).save(student);
+        verify(lessonRepository).save(lesson);
+    }
+
+    @Test
+    @DisplayName("updateLessonStatus - COMPLETED to SCHEDULED increments balance")
+    void updateLessonStatus_CompletedToScheduled_IncrementsBalance() {
+        student.setLessonBalance(3);
+        lesson.setStatus(LessonStatus.COMPLETED);
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(lessonRepository.findByIdAndTutorId(10L, tutorId)).thenReturn(Optional.of(lesson));
+        when(lessonRepository.save(any(Lesson.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        LessonStatusUpdateRequest request = LessonStatusUpdateRequest.builder()
+                .status(LessonStatus.SCHEDULED)
+                .build();
+
+        lessonService.updateLessonStatus(10L, request);
+
+        assertThat(student.getLessonBalance()).isEqualTo(4);
+        assertThat(lesson.getStatus()).isEqualTo(LessonStatus.SCHEDULED);
+        verify(studentProfileRepository).save(student);
+        verify(lessonRepository).save(lesson);
+    }
+
+    @Test
+    @DisplayName("updateLessonStatus - SCHEDULED to CANCELLED_BY_STUDENT leaves balance unchanged")
+    void updateLessonStatus_ScheduledToCancelled_LeavesBalanceUnchanged() {
+        student.setLessonBalance(5);
+        lesson.setStatus(LessonStatus.SCHEDULED);
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(lessonRepository.findByIdAndTutorId(10L, tutorId)).thenReturn(Optional.of(lesson));
+        when(lessonRepository.save(any(Lesson.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        LessonStatusUpdateRequest request = LessonStatusUpdateRequest.builder()
+                .status(LessonStatus.CANCELLED_BY_STUDENT)
+                .build();
+
+        lessonService.updateLessonStatus(10L, request);
+
+        assertThat(student.getLessonBalance()).isEqualTo(5);
+        verify(studentProfileRepository, never()).save(any());
+        verify(lessonRepository).save(lesson);
+    }
+
+    @Test
+    @DisplayName("deleteLesson - when COMPLETED increments student balance by 1")
+    void deleteLesson_WhenCompleted_IncrementsBalance() {
+        student.setLessonBalance(2);
+        lesson.setStatus(LessonStatus.COMPLETED);
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(lessonRepository.findByIdAndTutorId(10L, tutorId)).thenReturn(Optional.of(lesson));
+
+        lessonService.deleteLesson(10L);
+
+        assertThat(student.getLessonBalance()).isEqualTo(3);
+        verify(studentProfileRepository).save(student);
+        verify(lessonRepository).delete(lesson);
+    }
+
+    @Test
+    @DisplayName("deleteLesson - when SCHEDULED does not change student balance")
+    void deleteLesson_WhenScheduled_DoesNotChangeBalance() {
+        student.setLessonBalance(2);
+        lesson.setStatus(LessonStatus.SCHEDULED);
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(lessonRepository.findByIdAndTutorId(10L, tutorId)).thenReturn(Optional.of(lesson));
+
+        lessonService.deleteLesson(10L);
+
+        assertThat(student.getLessonBalance()).isEqualTo(2);
+        verify(studentProfileRepository, never()).save(any());
+        verify(lessonRepository).delete(lesson);
     }
 }

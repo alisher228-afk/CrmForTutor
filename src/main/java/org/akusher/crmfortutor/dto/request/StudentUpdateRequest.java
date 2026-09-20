@@ -20,8 +20,6 @@ import java.math.BigDecimal;
 @Builder
 public class StudentUpdateRequest {
 
-    private Long userId;
-
     @NotBlank(message = "First name is required")
     @Size(max = 100, message = "First name must not exceed 100 characters")
     private String firstName;

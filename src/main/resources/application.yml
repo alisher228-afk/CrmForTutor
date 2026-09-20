@@ -33,7 +33,7 @@ storage:
   max-file-size: ${STORAGE_MAX_FILE_SIZE:10MB}
 
 jwt:
-  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+  secret: ${JWT_SECRET}
   access-expiration: ${JWT_ACCESS_EXPIRATION:900000} # 15 minutes (in ms)
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000} # 7 days (in ms)
 
@@ -44,6 +44,7 @@ telegram:
   bot-token: ${TELEGRAM_BOT_TOKEN:}
   bot-username: ${TELEGRAM_BOT_USERNAME:}
   api-url: ${TELEGRAM_API_URL:https://api.telegram.org}
+  webhook-secret-token: ${TELEGRAM_WEBHOOK_SECRET:}
 
 reminders:
   interval-minutes: ${REMINDERS_INTERVAL_MINUTES:30}

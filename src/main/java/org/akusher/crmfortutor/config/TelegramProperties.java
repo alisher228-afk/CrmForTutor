@@ -13,4 +13,5 @@ public class TelegramProperties {
     private String botToken;
     private String botUsername;
     private String apiUrl = "https://api.telegram.org";
+    private String webhookSecretToken;
 }

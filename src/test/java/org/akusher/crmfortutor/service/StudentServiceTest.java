@@ -1,9 +1,13 @@
 package org.akusher.crmfortutor.service;
 
 import org.akusher.crmfortutor.config.TelegramProperties;
+import org.akusher.crmfortutor.dto.request.StudentCreateRequest;
+import org.akusher.crmfortutor.dto.request.StudentUpdateRequest;
 import org.akusher.crmfortutor.dto.response.StudentInviteResponse;
+import org.akusher.crmfortutor.dto.response.StudentResponse;
 import org.akusher.crmfortutor.dto.response.TelegramLinkCodeResponse;
 import org.akusher.crmfortutor.entity.StudentProfile;
+import org.akusher.crmfortutor.entity.StudentStatus;
 import org.akusher.crmfortutor.entity.User;
 import org.akusher.crmfortutor.exception.BadRequestException;
 import org.akusher.crmfortutor.exception.ResourceNotFoundException;
@@ -47,12 +51,13 @@ class StudentServiceTest {
     private StudentService studentService;
 
     private Long tutorId;
+    private User tutor;
     private StudentProfile student;
 
     @BeforeEach
     void setUp() {
         tutorId = 1L;
-        User tutor = User.builder().id(tutorId).email("tutor@example.com").build();
+        tutor = User.builder().id(tutorId).email("tutor@example.com").build();
 
         student = StudentProfile.builder()
                 .id(10L)
@@ -144,5 +149,69 @@ class StudentServiceTest {
                 .hasMessageContaining("Student not found with id: 999");
 
         verify(studentProfileRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("createStudent - creates profile without setting user")
+    void createStudent_Success() {
+        StudentCreateRequest request = StudentCreateRequest.builder()
+                .firstName("Anna")
+                .lastName("Ivanova")
+                .build();
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(userRepository.findById(tutorId)).thenReturn(Optional.of(tutor));
+
+        StudentProfile createdProfile = StudentProfile.builder()
+                .firstName("Anna")
+                .lastName("Ivanova")
+                .build();
+        when(studentMapper.toEntity(request)).thenReturn(createdProfile);
+        when(studentProfileRepository.save(any(StudentProfile.class))).thenAnswer(inv -> {
+            StudentProfile s = inv.getArgument(0);
+            s.setId(20L);
+            return s;
+        });
+
+        StudentResponse response = StudentResponse.builder()
+                .id(20L)
+                .firstName("Anna")
+                .lastName("Ivanova")
+                .build();
+        when(studentMapper.toResponse(any(StudentProfile.class))).thenReturn(response);
+
+        StudentResponse result = studentService.createStudent(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(20L);
+        assertThat(createdProfile.getUser()).isNull();
+        assertThat(createdProfile.getTutor()).isEqualTo(tutor);
+    }
+
+    @Test
+    @DisplayName("updateStudent - updates profile without modifying user")
+    void updateStudent_Success() {
+        StudentUpdateRequest request = StudentUpdateRequest.builder()
+                .firstName("Dmitry")
+                .lastName("Smirnov")
+                .status(StudentStatus.ACTIVE)
+                .build();
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(studentProfileRepository.findByIdAndTutorId(10L, tutorId)).thenReturn(Optional.of(student));
+        when(studentProfileRepository.save(any(StudentProfile.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        StudentResponse response = StudentResponse.builder()
+                .id(10L)
+                .firstName("Dmitry")
+                .lastName("Smirnov")
+                .build();
+        when(studentMapper.toResponse(student)).thenReturn(response);
+
+        StudentResponse result = studentService.updateStudent(10L, request);
+
+        assertThat(result).isNotNull();
+        assertThat(student.getUser()).isNull();
+        verify(studentMapper).updateEntityFromDto(request, student);
     }
 }

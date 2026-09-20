@@ -44,6 +44,7 @@ telegram:
   bot-token: ${TELEGRAM_BOT_TOKEN:}
   bot-username: ${TELEGRAM_BOT_USERNAME:}
   api-url: ${TELEGRAM_API_URL:https://api.telegram.org}
+  webhook-secret-token: ${TELEGRAM_WEBHOOK_SECRET:}
 
 reminders:
   interval-minutes: ${REMINDERS_INTERVAL_MINUTES:30}

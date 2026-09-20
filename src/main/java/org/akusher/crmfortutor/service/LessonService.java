@@ -67,6 +67,10 @@ public class LessonService {
         User tutor = userRepository.findById(tutorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Tutor not found with id: " + tutorId));
 
+        if (lessonRepository.existsConflictingLesson(student.getId(), request.getStartTime(), request.getEndTime(), null)) {
+            throw new BadRequestException("На это время у ученика уже запланирован урок");
+        }
+
         Lesson lesson = Lesson.builder()
                 .tutor(tutor)
                 .student(student)
@@ -92,6 +96,10 @@ public class LessonService {
         Lesson lesson = lessonRepository.findByIdAndTutorId(id, tutorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson not found with id: " + id));
 
+        if (lessonRepository.existsConflictingLesson(lesson.getStudent().getId(), request.getStartTime(), request.getEndTime(), lesson.getId())) {
+            throw new BadRequestException("На это время у ученика уже запланирован урок");
+        }
+
         lesson.setStartTime(request.getStartTime());
         lesson.setEndTime(request.getEndTime());
         lesson.setTopic(request.getTopic());
@@ -111,13 +119,7 @@ public class LessonService {
         LessonStatus oldStatus = lesson.getStatus();
         LessonStatus newStatus = request.getStatus();
 
-        // Idempotent decrement of student's lesson balance when transitioning to COMPLETED
-        if (oldStatus != LessonStatus.COMPLETED && newStatus == LessonStatus.COMPLETED) {
-            StudentProfile student = lesson.getStudent();
-            int currentBalance = student.getLessonBalance() != null ? student.getLessonBalance() : 0;
-            student.setLessonBalance(currentBalance - 1);
-            studentProfileRepository.save(student);
-        }
+        adjustBalanceOnStatusChange(oldStatus, newStatus, lesson.getStudent());
 
         lesson.setStatus(newStatus);
         Lesson updated = lessonRepository.save(lesson);
@@ -131,6 +133,23 @@ public class LessonService {
         Lesson lesson = lessonRepository.findByIdAndTutorId(id, tutorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Lesson not found with id: " + id));
 
+        adjustBalanceOnStatusChange(lesson.getStatus(), null, lesson.getStudent());
+
         lessonRepository.delete(lesson);
+    }
+
+    private void adjustBalanceOnStatusChange(LessonStatus oldStatus, LessonStatus newStatus, StudentProfile student) {
+        if (student == null) {
+            return;
+        }
+        if (oldStatus != LessonStatus.COMPLETED && newStatus == LessonStatus.COMPLETED) {
+            int currentBalance = student.getLessonBalance() != null ? student.getLessonBalance() : 0;
+            student.setLessonBalance(currentBalance - 1);
+            studentProfileRepository.save(student);
+        } else if (oldStatus == LessonStatus.COMPLETED && newStatus != LessonStatus.COMPLETED) {
+            int currentBalance = student.getLessonBalance() != null ? student.getLessonBalance() : 0;
+            student.setLessonBalance(currentBalance + 1);
+            studentProfileRepository.save(student);
+        }
     }
 }

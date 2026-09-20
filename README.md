@@ -229,6 +229,8 @@ stateDiagram-v2
 | `POST` | `/api/v1/students/{id}/invite` | `TUTOR` | Генерация одноразового инвайт-токена (срок 7 дней) |
 | `POST` | `/api/v1/students/{id}/telegram-link-code` | `TUTOR` | Генерация 6-значного кода привязки Telegram (срок 15 минут) |
 
+> **Безопасность привязки аккаунта**: Репетитор не может вручную привязать произвольный аккаунт пользователя (`User`) к карточке ученика через `userId`. Единственный способ связать `StudentProfile` с учетной записью пользователя — безопасный инвайт-флоу: генерация одноразового токена приглашения (`POST /api/v1/students/{id}/invite`) и последующая регистрация ученика (`POST /api/v1/auth/register-student`).
+
 ### 🤖 Telegram Webhook (`/api/v1/telegram`)
 
 | Метод | Путь | Роль | Описание |
@@ -342,6 +344,7 @@ Telegram Bot API доставляет апдейты через вебхук **�
 После развертывания приложения на сервере зарегистрируйте URL вебхука:
 ```bash
 curl -F "url=https://your-crm-domain.com/api/v1/telegram/webhook" \
+     -F "secret_token=<TELEGRAM_WEBHOOK_SECRET>" \
      https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook
 ```
 Успешный ответ Telegram:
@@ -394,6 +397,7 @@ ngrok http 8081
 
 # 2. Установить полученный HTTPS URL в Telegram Webhook
 curl -F "url=https://<your-subdomain>.ngrok-free.app/api/v1/telegram/webhook" \
+     -F "secret_token=<TELEGRAM_WEBHOOK_SECRET>" \
      https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook
 ```
 
@@ -443,6 +447,7 @@ STORAGE_UPLOAD_DIR=./uploads
 STORAGE_MAX_FILE_SIZE=10MB
 TELEGRAM_BOT_TOKEN=123456789:ABCDefGhIJKlmNoPQRsTUVwxyZ
 TELEGRAM_BOT_USERNAME=MyTutorBot
+TELEGRAM_WEBHOOK_SECRET=b551fc74a0cf73210cffe4bfe8b69a5d0fe6ae8c94353de91b75c73027262eb6
 ```
 
 ### 2. Запуск базы данных в Docker (опционально)
@@ -519,6 +524,7 @@ docker run --name crm-postgres -e POSTGRES_DB=crm_for_tutor -e POSTGRES_USER=pos
 | `TELEGRAM_BOT_TOKEN` | Токен бота от `@BotFather` | `123456789:ABCDefGhIJKlmNoPQRsTUVwxyZ` |
 | `TELEGRAM_BOT_USERNAME` | Имя пользователя бота | `MyTutorCrmBot` |
 | `TELEGRAM_API_URL` | Базовый URL Bot API | `https://api.telegram.org` |
+| `TELEGRAM_WEBHOOK_SECRET` | Секретный токен для проверки заголовка `X-Telegram-Bot-Api-Secret-Token` | `b551fc74a0cf73210cffe4bfe8b69a5d0fe6ae8c94353de91b75c73027262eb6` |
 | `REMINDERS_INTERVAL_MINUTES` | Интервал выборки напоминаний | `30` |
 | `REMINDERS_CRON` | Расписание джобы напоминаний | `0 */30 * * * *` |
 
@@ -576,6 +582,7 @@ Telegram Bot API отправляет события **только на пуб�
    После того как бэкенд стал доступен по HTTPS, вызовите метод `setWebhook`:
    ```bash
    curl -F "url=https://crm.yourdomain.com/api/v1/telegram/webhook" \
+        -F "secret_token=<TELEGRAM_WEBHOOK_SECRET>" \
         https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook
    ```
    Ожидаемый ответ:

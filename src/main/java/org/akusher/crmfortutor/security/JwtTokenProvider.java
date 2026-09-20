@@ -86,6 +86,10 @@ public class JwtTokenProvider {
         return getClaims(token).getSubject();
     }
 
+    public String getTokenType(String token) {
+        return getClaims(token).get("tokenType", String.class);
+    }
+
     public boolean validateToken(String token) {
         try {
             Jwts.parser().verifyWith(key).build().parseSignedClaims(token);

@@ -1,6 +1,7 @@
 package org.akusher.crmfortutor.service;
 
 import org.akusher.crmfortutor.dto.request.LoginRequest;
+import org.akusher.crmfortutor.dto.request.RefreshTokenRequest;
 import org.akusher.crmfortutor.dto.request.StudentRegisterRequest;
 import org.akusher.crmfortutor.dto.response.AuthResponse;
 import org.akusher.crmfortutor.entity.Role;
@@ -206,5 +207,87 @@ class AuthServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.getAccessToken()).isEqualTo("access-token");
         assertThat(response.getRole()).isEqualTo(Role.ROLE_STUDENT);
+    }
+
+    @Test
+    @DisplayName("refresh - success with valid refresh token")
+    void refresh_Success() {
+        RefreshTokenRequest request = RefreshTokenRequest.builder()
+                .refreshToken("valid-refresh-token")
+                .build();
+
+        User user = User.builder()
+                .id(1L)
+                .email("student@example.com")
+                .role(Role.ROLE_STUDENT)
+                .build();
+
+        when(tokenProvider.validateToken("valid-refresh-token")).thenReturn(true);
+        when(tokenProvider.getTokenType("valid-refresh-token")).thenReturn("REFRESH");
+        when(tokenProvider.getEmailFromToken("valid-refresh-token")).thenReturn("student@example.com");
+        when(userRepository.findByEmail("student@example.com")).thenReturn(Optional.of(user));
+        when(tokenProvider.generateAccessToken(1L, "student@example.com", Role.ROLE_STUDENT)).thenReturn("new-access-token");
+        when(tokenProvider.generateRefreshToken("student@example.com")).thenReturn("new-refresh-token");
+
+        AuthResponse response = authService.refresh(request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getAccessToken()).isEqualTo("new-access-token");
+        assertThat(response.getRefreshToken()).isEqualTo("new-refresh-token");
+        assertThat(response.getTokenType()).isEqualTo("Bearer");
+        assertThat(response.getRole()).isEqualTo(Role.ROLE_STUDENT);
+    }
+
+    @Test
+    @DisplayName("refresh - throws BadRequestException when access token is provided")
+    void refresh_WithAccessToken_ThrowsBadRequestException() {
+        RefreshTokenRequest request = RefreshTokenRequest.builder()
+                .refreshToken("valid-access-token")
+                .build();
+
+        when(tokenProvider.validateToken("valid-access-token")).thenReturn(true);
+        when(tokenProvider.getTokenType("valid-access-token")).thenReturn("ACCESS");
+
+        assertThatThrownBy(() -> authService.refresh(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Invalid refresh token");
+
+        verify(userRepository, never()).findByEmail(any());
+        verify(tokenProvider, never()).generateAccessToken(any(), any(), any());
+        verify(tokenProvider, never()).generateRefreshToken(any(String.class));
+    }
+
+    @Test
+    @DisplayName("refresh - throws BadRequestException when tokenType is null or not REFRESH")
+    void refresh_WithNonRefreshToken_ThrowsBadRequestException() {
+        RefreshTokenRequest request = RefreshTokenRequest.builder()
+                .refreshToken("unknown-type-token")
+                .build();
+
+        when(tokenProvider.validateToken("unknown-type-token")).thenReturn(true);
+        when(tokenProvider.getTokenType("unknown-type-token")).thenReturn(null);
+
+        assertThatThrownBy(() -> authService.refresh(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Invalid refresh token");
+
+        verify(userRepository, never()).findByEmail(any());
+    }
+
+    @Test
+    @DisplayName("refresh - throws BadRequestException when token is invalid or expired")
+    void refresh_InvalidOrExpiredToken_ThrowsBadRequestException() {
+        RefreshTokenRequest request = RefreshTokenRequest.builder()
+                .refreshToken("invalid-token")
+                .build();
+
+        when(tokenProvider.validateToken("invalid-token")).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.refresh(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Invalid or expired refresh token");
+
+        verify(tokenProvider, never()).getTokenType(any());
+        verify(userRepository, never()).findByEmail(any());
     }
 }

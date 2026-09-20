@@ -53,4 +53,18 @@ public interface LessonRepository extends JpaRepository<Lesson, Long> {
             @Param("status") LessonStatus status,
             @Param("windowStart") LocalDateTime windowStart,
             @Param("windowEnd") LocalDateTime windowEnd);
+
+    @Query("""
+        SELECT COUNT(l) > 0 FROM Lesson l
+        WHERE l.student.id = :studentId
+          AND l.status NOT IN (org.akusher.crmfortutor.entity.LessonStatus.CANCELLED_BY_STUDENT, org.akusher.crmfortutor.entity.LessonStatus.CANCELLED_BY_TUTOR)
+          AND l.startTime < :end
+          AND l.endTime > :start
+          AND (:excludeId IS NULL OR l.id <> :excludeId)
+    """)
+    boolean existsConflictingLesson(
+            @Param("studentId") Long studentId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end,
+            @Param("excludeId") Long excludeId);
 }

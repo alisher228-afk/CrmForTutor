@@ -66,12 +66,6 @@ public class StudentService {
             student.setLessonBalance(0);
         }
 
-        if (request.getUserId() != null) {
-            User studentUser = userRepository.findById(request.getUserId())
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + request.getUserId()));
-            student.setUser(studentUser);
-        }
-
         StudentProfile saved = studentProfileRepository.save(student);
         return studentMapper.toResponse(saved);
     }
@@ -83,12 +77,6 @@ public class StudentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + id));
 
         studentMapper.updateEntityFromDto(request, student);
-
-        if (request.getUserId() != null) {
-            User studentUser = userRepository.findById(request.getUserId())
-                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + request.getUserId()));
-            student.setUser(studentUser);
-        }
 
         StudentProfile updated = studentProfileRepository.save(student);
         return studentMapper.toResponse(updated);
