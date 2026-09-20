@@ -18,8 +18,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -67,6 +67,9 @@ class LessonReminderSchedulerTest {
                 eq(LessonStatus.SCHEDULED), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(List.of(lesson1, lesson2));
 
+        when(notificationService.sendLessonReminder(lesson1)).thenReturn(true);
+        when(notificationService.sendLessonReminder(lesson2)).thenReturn(true);
+
         int processed = scheduler.processRemindersForTime(now, 30);
 
         assertThat(processed).isEqualTo(2);
@@ -112,8 +115,7 @@ class LessonReminderSchedulerTest {
         doThrow(new RuntimeException("Simulated Telegram error"))
                 .when(notificationService).sendLessonReminder(failingLesson);
 
-        doAnswer(inv -> null)
-                .when(notificationService).sendLessonReminder(succeedingLesson);
+        when(notificationService.sendLessonReminder(succeedingLesson)).thenReturn(true);
 
         int processed = scheduler.processRemindersForTime(now, 30);
 
@@ -125,5 +127,39 @@ class LessonReminderSchedulerTest {
         verify(notificationService).sendLessonReminder(succeedingLesson);
         verify(lessonRepository, times(0)).save(failingLesson);
         verify(lessonRepository, times(1)).save(succeedingLesson);
+    }
+
+    @Test
+    @DisplayName("processRemindersForTime - неудачная отправка не выставляет reminderSentAt")
+    void processReminders_FailedSending_DoesNotSetReminderSentAt() {
+        LocalDateTime now = LocalDateTime.of(2026, 9, 20, 12, 0);
+
+        StudentProfile student = StudentProfile.builder()
+                .id(3L)
+                .telegramChatId(777777L)
+                .build();
+
+        Lesson lesson = Lesson.builder()
+                .id(301L)
+                .student(student)
+                .startTime(now.plusHours(24))
+                .status(LessonStatus.SCHEDULED)
+                .topic("Химия")
+                .reminderSentAt(null)
+                .build();
+
+        when(lessonRepository.findScheduledLessonsForReminder(
+                eq(LessonStatus.SCHEDULED), any(LocalDateTime.class), any(LocalDateTime.class)))
+                .thenReturn(List.of(lesson));
+
+        when(notificationService.sendLessonReminder(lesson)).thenReturn(false);
+
+        int processed = scheduler.processRemindersForTime(now, 30);
+
+        assertThat(processed).isEqualTo(0);
+        assertThat(lesson.getReminderSentAt()).isNull();
+
+        verify(notificationService).sendLessonReminder(lesson);
+        verify(lessonRepository, never()).save(lesson);
     }
 }

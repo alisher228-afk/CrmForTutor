@@ -46,11 +46,15 @@ public class LessonReminderScheduler {
         int count = 0;
         for (Lesson lesson : lessons) {
             try {
-                notificationService.sendLessonReminder(lesson);
-                lesson.setReminderSentAt(Instant.now());
-                lessonRepository.save(lesson);
-                count++;
-                log.info("Successfully sent reminder for lesson id: {}", lesson.getId());
+                boolean sent = notificationService.sendLessonReminder(lesson);
+                if (sent) {
+                    lesson.setReminderSentAt(Instant.now());
+                    lessonRepository.save(lesson);
+                    count++;
+                    log.info("Successfully sent reminder for lesson id: {}", lesson.getId());
+                } else {
+                    log.warn("Failed to send reminder for lesson id {}. reminderSentAt left null for retry in next run.", lesson.getId());
+                }
             } catch (Exception e) {
                 log.error("Failed to send reminder for lesson id {}: {}", lesson.getId(), e.getMessage(), e);
             }

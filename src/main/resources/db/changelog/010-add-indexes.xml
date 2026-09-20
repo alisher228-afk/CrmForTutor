@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="010-1-add-indexes" author="akusher">
+        <createIndex indexName="idx_student_profiles_tutor_id" tableName="student_profiles">
+            <column name="tutor_id"/>
+        </createIndex>
+        <createIndex indexName="idx_lessons_tutor_id" tableName="lessons">
+            <column name="tutor_id"/>
+        </createIndex>
+        <createIndex indexName="idx_lessons_student_id" tableName="lessons">
+            <column name="student_id"/>
+        </createIndex>
+        <createIndex indexName="idx_lessons_start_time" tableName="lessons">
+            <column name="start_time"/>
+        </createIndex>
+        <createIndex indexName="idx_payments_student_id" tableName="payments">
+            <column name="student_id"/>
+        </createIndex>
+        <createIndex indexName="idx_payments_payment_date" tableName="payments">
+            <column name="payment_date"/>
+        </createIndex>
+        <createIndex indexName="idx_homework_lesson_id" tableName="homework">
+            <column name="lesson_id"/>
+        </createIndex>
+        <createIndex indexName="idx_attachments_homework_id" tableName="attachments">
+            <column name="homework_id"/>
+        </createIndex>
+        <createIndex indexName="idx_student_profiles_telegram_link_code" tableName="student_profiles">
+            <column name="telegram_link_code"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

@@ -6,7 +6,7 @@
 [![Liquibase](https://img.shields.io/badge/Liquibase-Database%20Migrations-red?logo=liquibase)](https://www.liquibase.org/)
 [![JWT](https://img.shields.io/badge/Auth-JWT%20(JJWT)-yellow?logo=jsonwebtokens)](https://jwt.io/)
 [![OpenAPI](https://img.shields.io/badge/Documentation-Swagger%20OpenAPI-green?logo=swagger)](https://swagger.io/)
-[![Tests](https://img.shields.io/badge/Tests-100%20passed-success?logo=junit5)](https://junit.org/junit5/)
+[![Tests](https://img.shields.io/badge/Tests-153%20passed-success?logo=junit5)](https://junit.org/junit5/)
 
 **CRM for Tutor** — специализированная серверная платформа для автоматизации работы частных преподавателей, репетиторов и онлайн-школ. Система предоставляет раздельные рабочие пространства для репетитора и ученика: управление расписанием, балансом уроков, взаиморасчетами, домашними заданиями и файловыми вложениями с контролем доступа и строгой изоляцией данных.
 
@@ -476,9 +476,10 @@ docker run --name crm-postgres -e POSTGRES_DB=crm_for_tutor -e POSTGRES_USER=pos
 ### 1. Архитектура контейнеризации
 - **Multi-stage [`Dockerfile`](Dockerfile)**:
   - **Build-стадия**: `maven:3.9-eclipse-temurin-21` — сборка артефакта (`mvn clean package -DskipTests`) с кэшированием зависимостей.
-  - **Runtime-стадия**: легкий образ `eclipse-temurin:21-jre`, создающий изолированную директорию `/app/uploads` и запускающий скомпилированный JAR.
+  - **Runtime-стадия**: легкий образ `eclipse-temurin:21-jre` с запуском под непривилегированным пользователем `appuser` (`groupadd`/`useradd`), создающий изолированную директорию `/app/uploads` с корректными правами доступа и запускающий JAR.
 - **[`docker-compose.yml`](docker-compose.yml)**:
-  - Сервис `postgres`: PostgreSQL 16 Alpine с volume `postgres_data` и встроенным healthcheck.
+  - Сервис `postgres`: PostgreSQL 16 Alpine с volume `postgres_data` и встроенным healthcheck. Порт `5432` проброшен наружу для удобства локальной разработки и прямого подключения из IDE/DBeaver.
+    > ⚠️ **Безопасность портов БД в Production**: На реальном продакшен-сервере публиковать порт базы данных наружу во внешнюю сеть **не следует** — закомментируйте секцию `ports` у сервиса `postgres`, чтобы доступ к СУБД был возможен только внутри изолированной сети Docker Compose для сервиса `app`.
   - Сервис `app`: Spring Boot бэкенд с профилем `prod`, зависимостью от `postgres` (`service_healthy`) и volume `app_uploads`.
   - **Персистентность файлов**: том `app_uploads` монтируется в `storage.upload-dir` (`/app/uploads`). Без этого тома вложения к домашним заданиям пропадут при перезапуске или обновлении контейнера.
 

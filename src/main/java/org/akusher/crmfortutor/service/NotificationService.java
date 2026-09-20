@@ -18,16 +18,16 @@ public class NotificationService {
 
     private final TelegramService telegramService;
 
-    public void sendLessonReminder(Lesson lesson) {
+    public boolean sendLessonReminder(Lesson lesson) {
         if (lesson == null) {
             log.warn("Cannot send lesson reminder: lesson is null");
-            return;
+            return false;
         }
 
         StudentProfile student = lesson.getStudent();
         if (student == null) {
             log.warn("Cannot send lesson reminder for lesson id {}: student is null", lesson.getId());
-            return;
+            return false;
         }
 
         String time = lesson.getStartTime() != null ? lesson.getStartTime().format(TIME_FORMATTER) : "";
@@ -35,12 +35,19 @@ public class NotificationService {
 
         Long chatId = student.getTelegramChatId();
         if (chatId != null) {
-            telegramService.sendMessage(chatId, message);
-            log.info("Sent lesson reminder to student id {} (chatId {}) for lesson id {}",
-                    student.getId(), chatId, lesson.getId());
+            boolean sent = telegramService.sendMessage(chatId, message);
+            if (sent) {
+                log.info("Sent lesson reminder to student id {} (chatId {}) for lesson id {}",
+                        student.getId(), chatId, lesson.getId());
+            } else {
+                log.warn("Failed to send lesson reminder to student id {} (chatId {}) for lesson id {}",
+                        student.getId(), chatId, lesson.getId());
+            }
+            return sent;
         } else {
             log.info("Student id {} has no telegramChatId, reminder skipped for lesson id {}",
                     student.getId(), lesson.getId());
+            return false;
         }
     }
 

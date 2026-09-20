@@ -14,11 +14,16 @@ RUN mvn clean package -DskipTests -B
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 
-# Ensure upload directory exists
-RUN mkdir -p /app/uploads
+# Create non-privileged user and group
+RUN groupadd -r appgroup && useradd -r -g appgroup -d /app -s /sbin/nologin appuser
+
+# Ensure upload directory exists and set permissions
+RUN mkdir -p /app/uploads && chown -R appuser:appgroup /app
 
 # Copy built artifact from build stage
-COPY --from=builder /build/target/*.jar app.jar
+COPY --from=builder --chown=appuser:appgroup /build/target/*.jar app.jar
+
+USER appuser
 
 EXPOSE 8081
 

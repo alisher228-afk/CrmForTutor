@@ -44,10 +44,10 @@ public class TelegramService {
         this.restClient = restClient != null ? restClient : RestClient.create();
     }
 
-    public void sendMessage(Long chatId, String text) {
-        if (!StringUtils.hasText(telegramProperties.getBotToken())) {
-            log.warn("Telegram bot token is not configured. Skipping sendMessage to chatId: {}", chatId);
-            return;
+    public boolean sendMessage(Long chatId, String text) {
+        if (chatId == null || !StringUtils.hasText(telegramProperties.getBotToken())) {
+            log.warn("Telegram bot token is not configured or chatId is null. Skipping sendMessage to chatId: {}", chatId);
+            return false;
         }
 
         String url = String.format("%s/bot%s/sendMessage",
@@ -67,8 +67,10 @@ public class TelegramService {
                     .retrieve()
                     .toBodilessEntity();
             log.info("Sent Telegram message to chatId: {}", chatId);
+            return true;
         } catch (Exception e) {
             log.error("Failed to send Telegram message to chatId {}: {}", chatId, e.getMessage(), e);
+            return false;
         }
     }
 

@@ -3,6 +3,7 @@ package org.akusher.crmfortutor.service;
 import org.akusher.crmfortutor.config.TelegramProperties;
 import org.akusher.crmfortutor.dto.telegram.TelegramChat;
 import org.akusher.crmfortutor.dto.telegram.TelegramMessage;
+import org.akusher.crmfortutor.dto.telegram.TelegramSendMessageRequest;
 import org.akusher.crmfortutor.dto.telegram.TelegramUpdate;
 import org.akusher.crmfortutor.entity.StudentProfile;
 import org.akusher.crmfortutor.repository.StudentProfileRepository;
@@ -12,7 +13,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -20,6 +23,8 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -29,6 +34,18 @@ class TelegramServiceTest {
 
     @Mock
     private StudentProfileRepository studentProfileRepository;
+
+    @Mock
+    private RestClient restClient;
+
+    @Mock
+    private RestClient.RequestBodyUriSpec requestBodyUriSpec;
+
+    @Mock
+    private RestClient.RequestBodySpec requestBodySpec;
+
+    @Mock
+    private RestClient.ResponseSpec responseSpec;
 
     private TelegramProperties telegramProperties;
     private TelegramService telegramService;
@@ -40,8 +57,15 @@ class TelegramServiceTest {
         telegramProperties.setBotUsername("TestBot");
         telegramProperties.setApiUrl("https://api.telegram.org");
 
-        // Use no-op or default RestClient for unit tests where external HTTP is avoided
-        telegramService = new TelegramService(studentProfileRepository, telegramProperties, RestClient.create());
+        lenient().when(restClient.post()).thenReturn(requestBodyUriSpec);
+        lenient().when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        lenient().when(requestBodySpec.contentType(any())).thenReturn(requestBodySpec);
+        lenient().when(requestBodySpec.body(any(Object.class))).thenReturn(requestBodySpec);
+        lenient().when(requestBodySpec.body(any(TelegramSendMessageRequest.class))).thenReturn(requestBodySpec);
+        lenient().when(requestBodySpec.retrieve()).thenReturn(responseSpec);
+        lenient().when(responseSpec.toBodilessEntity()).thenReturn(ResponseEntity.ok().build());
+
+        telegramService = new TelegramService(studentProfileRepository, telegramProperties, restClient);
     }
 
     @Test
@@ -193,10 +217,35 @@ class TelegramServiceTest {
     }
 
     @Test
-    @DisplayName("sendMessage - blank token skips without error")
-    void sendMessage_BlankToken_Skips() {
+    @DisplayName("sendMessage - returns true on successful dispatch")
+    void sendMessage_Success() {
+        boolean result = telegramService.sendMessage(12345L, "Test message");
+        assertThat(result).isTrue();
+        verify(restClient).post();
+    }
+
+    @Test
+    @DisplayName("sendMessage - blank token returns false")
+    void sendMessage_BlankToken_ReturnsFalse() {
         telegramProperties.setBotToken("");
-        telegramService.sendMessage(12345L, "Test message");
-        // No exception thrown
+        boolean result = telegramService.sendMessage(12345L, "Test message");
+        assertThat(result).isFalse();
+        verify(restClient, never()).post();
+    }
+
+    @Test
+    @DisplayName("sendMessage - null chatId returns false")
+    void sendMessage_NullChatId_ReturnsFalse() {
+        boolean result = telegramService.sendMessage(null, "Test message");
+        assertThat(result).isFalse();
+        verify(restClient, never()).post();
+    }
+
+    @Test
+    @DisplayName("sendMessage - returns false when rest client throws exception")
+    void sendMessage_Error_ReturnsFalse() {
+        when(restClient.post()).thenThrow(new RestClientException("Telegram API down"));
+        boolean result = telegramService.sendMessage(12345L, "Test message");
+        assertThat(result).isFalse();
     }
 }
