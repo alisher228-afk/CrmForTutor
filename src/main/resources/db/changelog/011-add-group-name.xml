@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="011-1-add-group-name-to-student-profiles" author="akusher">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="student_profiles" columnName="group_name"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="student_profiles">
+            <column name="group_name" type="VARCHAR(100)"/>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="011-2-add-group-name-to-lessons" author="akusher">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="lessons" columnName="group_name"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="lessons">
+            <column name="group_name" type="VARCHAR(100)"/>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

@@ -27,7 +27,10 @@ import java.util.UUID;
 public class LocalFileStorageService implements FileStorageService {
 
     public static final Set<String> DEFAULT_ALLOWED_EXTENSIONS = Set.of(
-            "pdf", "jpg", "jpeg", "png", "doc", "docx", "zip"
+            "pdf", "jpg", "jpeg", "png", "webp", "gif", "svg",
+            "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "rtf", "odt", "csv",
+            "zip", "rar", "7z", "tar", "gz",
+            "mp3", "wav", "ogg", "m4a", "mp4", "webm"
     );
 
     private final Path uploadPath;
@@ -142,6 +145,30 @@ public class LocalFileStorageService implements FileStorageService {
         } catch (IOException e) {
             log.error("Failed to delete file {}", fileName, e);
             throw new RuntimeException("Failed to delete file: " + fileName, e);
+        }
+    }
+
+    @Override
+    public String copy(String sourceFileName) {
+        if (sourceFileName == null || sourceFileName.isBlank()) {
+            throw new BadRequestException("Source file name is required");
+        }
+
+        Path sourcePath = this.uploadPath.resolve(sourceFileName).normalize();
+        if (!sourcePath.startsWith(this.uploadPath) || !Files.exists(sourcePath)) {
+            throw new ResourceNotFoundException("Source file not found: " + sourceFileName);
+        }
+
+        String extension = getFileExtension(sourceFileName);
+        String targetFileName = UUID.randomUUID() + (extension.isEmpty() ? "" : "." + extension.toLowerCase());
+        Path targetPath = this.uploadPath.resolve(targetFileName).normalize();
+
+        try {
+            Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+            return targetFileName;
+        } catch (IOException e) {
+            log.error("Failed to copy file from {} to {}", sourceFileName, targetFileName, e);
+            throw new RuntimeException("Failed to copy file: " + sourceFileName, e);
         }
     }
 

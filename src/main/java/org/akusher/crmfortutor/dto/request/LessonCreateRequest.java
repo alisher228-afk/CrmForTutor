@@ -17,7 +17,6 @@ import java.time.LocalDateTime;
 @Builder
 public class LessonCreateRequest {
 
-    @NotNull(message = "Student ID is required")
     private Long studentId;
 
     @NotNull(message = "Start time is required")
@@ -31,4 +30,7 @@ public class LessonCreateRequest {
 
     @Size(max = 500, message = "Meeting URL must not exceed 500 characters")
     private String meetingUrl;
+
+    @Size(max = 100, message = "Group name must not exceed 100 characters")
+    private String groupName;
 }

@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.akusher.crmfortutor.dto.request.StudentCreateRequest;
 import org.akusher.crmfortutor.dto.request.StudentUpdateRequest;
+import org.akusher.crmfortutor.dto.response.StudentGroupResponse;
 import org.akusher.crmfortutor.dto.response.StudentInviteResponse;
 import org.akusher.crmfortutor.dto.response.StudentResponse;
 import org.akusher.crmfortutor.dto.response.TelegramLinkCodeResponse;
@@ -25,6 +26,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v1/students")
 @PreAuthorize("hasRole('TUTOR')")
@@ -37,9 +40,22 @@ public class StudentController {
     public ResponseEntity<Page<StudentResponse>> getStudents(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) StudentStatus status,
+            @RequestParam(required = false) String format,
+            @RequestParam(required = false) String groupName,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(studentService.getStudents(search, status, pageable));
+        return ResponseEntity.ok(studentService.getStudents(search, status, format, groupName, pageable));
     }
+
+    @GetMapping("/groups")
+    public ResponseEntity<List<StudentGroupResponse>> getGroups() {
+        return ResponseEntity.ok(studentService.getGroups());
+    }
+
+    @GetMapping("/groups/{groupName}/students")
+    public ResponseEntity<List<StudentResponse>> getStudentsByGroup(@PathVariable String groupName) {
+        return ResponseEntity.ok(studentService.getStudentsByGroup(groupName));
+    }
+
 
     @PostMapping
     public ResponseEntity<StudentResponse> createStudent(@Valid @RequestBody StudentCreateRequest request) {

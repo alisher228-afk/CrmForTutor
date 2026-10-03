@@ -34,9 +34,10 @@ public class LessonController {
 
     @GetMapping
     public ResponseEntity<List<LessonResponse>> getLessons(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
-        return ResponseEntity.ok(lessonService.getLessons(from, to));
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
+            @RequestParam(required = false) Long studentId) {
+        return ResponseEntity.ok(lessonService.getLessons(from, to, studentId));
     }
 
     @GetMapping("/{id}")
@@ -47,6 +48,11 @@ public class LessonController {
     @PostMapping
     public ResponseEntity<LessonResponse> createLesson(@Valid @RequestBody LessonCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(lessonService.createLesson(request));
+    }
+
+    @PostMapping("/group")
+    public ResponseEntity<List<LessonResponse>> createGroupLesson(@Valid @RequestBody LessonCreateRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(lessonService.createGroupLesson(request));
     }
 
     @PutMapping("/{id}")

@@ -13,19 +13,33 @@ import org.akusher.crmfortutor.entity.Payment;
 import org.akusher.crmfortutor.entity.StudentProfile;
 import org.akusher.crmfortutor.exception.BadRequestException;
 import org.akusher.crmfortutor.exception.ResourceNotFoundException;
+import org.akusher.crmfortutor.dto.response.AttachmentResponse;
+import org.akusher.crmfortutor.entity.Attachment;
+import org.akusher.crmfortutor.dto.request.LessonCancelRequest;
+import org.akusher.crmfortutor.dto.response.MaterialResponse;
+import org.akusher.crmfortutor.entity.LessonStatus;
+import org.akusher.crmfortutor.entity.TeachingMaterial;
+import org.akusher.crmfortutor.mapper.AttachmentMapper;
 import org.akusher.crmfortutor.mapper.HomeworkMapper;
 import org.akusher.crmfortutor.mapper.LessonMapper;
+import org.akusher.crmfortutor.mapper.MaterialMapper;
 import org.akusher.crmfortutor.mapper.PaymentMapper;
 import org.akusher.crmfortutor.mapper.StudentMapper;
+import org.akusher.crmfortutor.repository.AttachmentRepository;
 import org.akusher.crmfortutor.repository.HomeworkRepository;
 import org.akusher.crmfortutor.repository.LessonRepository;
 import org.akusher.crmfortutor.repository.PaymentRepository;
+import org.akusher.crmfortutor.repository.TeachingMaterialRepository;
 import org.akusher.crmfortutor.security.CurrentStudentProvider;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -39,6 +53,11 @@ public class StudentSelfService {
     private final LessonMapper lessonMapper;
     private final HomeworkMapper homeworkMapper;
     private final PaymentMapper paymentMapper;
+    private final AttachmentRepository attachmentRepository;
+    private final AttachmentMapper attachmentMapper;
+    private final TeachingMaterialRepository teachingMaterialRepository;
+    private final MaterialMapper materialMapper;
+    private final FileStorageService fileStorageService;
 
     @Transactional(readOnly = true)
     public StudentSelfResponse getProfile() {
@@ -48,15 +67,12 @@ public class StudentSelfService {
 
     @Transactional(readOnly = true)
     public List<LessonResponse> getLessons(LocalDateTime from, LocalDateTime to) {
-        if (from == null || to == null) {
-            throw new BadRequestException("Parameters 'from' and 'to' are required");
-        }
-        if (to.isBefore(from)) {
+        if (from != null && to != null && to.isBefore(from)) {
             throw new BadRequestException("Parameter 'to' must be after or equal to 'from'");
         }
 
         StudentProfile student = currentStudentProvider.getCurrentStudentProfile();
-        List<Lesson> lessons = lessonRepository.findByStudentIdAndInterval(student.getId(), from, to);
+        List<Lesson> lessons = lessonRepository.findByStudentIdAndFilters(student.getId(), from, to);
         return lessonMapper.toResponseList(lessons);
     }
 
@@ -64,7 +80,9 @@ public class StudentSelfService {
     public List<HomeworkResponse> getHomework() {
         StudentProfile student = currentStudentProvider.getCurrentStudentProfile();
         List<Homework> homeworks = homeworkRepository.findByStudentId(student.getId());
-        return homeworkMapper.toResponseList(homeworks);
+        List<HomeworkResponse> responses = homeworkMapper.toResponseList(homeworks);
+        populateAttachments(responses);
+        return responses;
     }
 
     @Transactional(readOnly = true)
@@ -104,6 +122,87 @@ public class StudentSelfService {
         }
 
         Homework updated = homeworkRepository.save(homework);
-        return homeworkMapper.toResponse(updated);
+        HomeworkResponse response = homeworkMapper.toResponse(updated);
+        response.setAttachments(attachmentMapper.toResponseList(attachmentRepository.findByHomeworkId(updated.getId())));
+        return response;
+    }
+
+    private void populateAttachments(List<HomeworkResponse> responses) {
+        if (responses == null || responses.isEmpty()) return;
+        List<Long> ids = responses.stream().map(HomeworkResponse::getId).toList();
+        List<Attachment> allAttachments = attachmentRepository.findByHomeworkIdIn(ids);
+        Map<Long, List<AttachmentResponse>> byHomework = allAttachments.stream()
+                .map(attachmentMapper::toResponse)
+                .collect(Collectors.groupingBy(AttachmentResponse::getHomeworkId));
+        responses.forEach(r -> r.setAttachments(byHomework.getOrDefault(r.getId(), Collections.emptyList())));
+    }
+
+    @Transactional
+    public LessonResponse cancelLesson(Long id, LessonCancelRequest request) {
+        StudentProfile student = currentStudentProvider.getCurrentStudentProfile();
+        Lesson lesson = lessonRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Урок не найден с id: " + id));
+
+        if (!lesson.getStudent().getId().equals(student.getId())) {
+            throw new BadRequestException("Этот урок не принадлежит вам");
+        }
+
+        if (lesson.getStatus() != LessonStatus.SCHEDULED) {
+            throw new BadRequestException("Можно отменить только запланированный урок (текущий статус: " + lesson.getStatus() + ")");
+        }
+
+        if (lesson.getStartTime().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("Нельзя отменить урок, который уже начался или прошел");
+        }
+
+        if (lesson.getStartTime().isBefore(LocalDateTime.now().plusHours(12))) {
+            throw new BadRequestException("До занятия осталось менее 12 часов. Поздняя отмена невозможна через систему, свяжитесь с преподавателем напрямую.");
+        }
+
+        lesson.setStatus(LessonStatus.CANCELLED_BY_STUDENT);
+        if (request != null && request.getReason() != null && !request.getReason().isBlank()) {
+            lesson.setCancellationReason(request.getReason().trim());
+        }
+
+        Lesson updated = lessonRepository.save(lesson);
+        return lessonMapper.toResponse(updated);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MaterialResponse> getMaterials(String search, String category) {
+        StudentProfile student = currentStudentProvider.getCurrentStudentProfile();
+        Long tutorId = student.getTutor().getId();
+        String normalizedCategory = (category != null && !category.isBlank()) ? category.trim() : null;
+        String normalizedSearch = (search != null && !search.isBlank()) ? search.trim() : null;
+
+        List<TeachingMaterial> list = teachingMaterialRepository.findByTutorIdAndFilters(
+                tutorId,
+                normalizedCategory,
+                normalizedSearch
+        );
+        return materialMapper.toResponseList(list);
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> getMaterialCategories() {
+        StudentProfile student = currentStudentProvider.getCurrentStudentProfile();
+        return teachingMaterialRepository.findDistinctCategoriesByTutorId(student.getTutor().getId());
+    }
+
+    @Transactional(readOnly = true)
+    public DownloadedAttachment downloadMaterial(Long id) {
+        StudentProfile student = currentStudentProvider.getCurrentStudentProfile();
+        Long tutorId = student.getTutor().getId();
+
+        TeachingMaterial material = teachingMaterialRepository.findByIdAndTutorId(id, tutorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Материал не найден с id: " + id));
+
+        Resource resource = fileStorageService.load(material.getFileName());
+        return new DownloadedAttachment(
+                resource,
+                material.getOriginalFileName(),
+                material.getContentType(),
+                material.getSizeBytes()
+        );
     }
 }

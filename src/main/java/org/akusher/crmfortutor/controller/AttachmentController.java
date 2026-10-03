@@ -44,7 +44,9 @@ public class AttachmentController {
     }
 
     @GetMapping("/api/v1/attachments/{id}/download")
-    public ResponseEntity<Resource> downloadAttachment(@PathVariable Long id) {
+    public ResponseEntity<Resource> downloadAttachment(
+            @PathVariable Long id,
+            @RequestParam(value = "inline", required = false, defaultValue = "false") boolean inline) {
         DownloadedAttachment downloaded = attachmentService.downloadAttachment(id);
 
         MediaType mediaType;
@@ -56,7 +58,7 @@ public class AttachmentController {
             mediaType = MediaType.APPLICATION_OCTET_STREAM;
         }
 
-        ContentDisposition disposition = ContentDisposition.attachment()
+        ContentDisposition disposition = (inline ? ContentDisposition.inline() : ContentDisposition.attachment())
                 .filename(downloaded.originalFileName(), StandardCharsets.UTF_8)
                 .build();
 

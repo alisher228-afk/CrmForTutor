@@ -7,18 +7,33 @@ import org.akusher.crmfortutor.dto.response.HomeworkResponse;
 import org.akusher.crmfortutor.entity.Homework;
 import org.akusher.crmfortutor.entity.HomeworkStatus;
 import org.akusher.crmfortutor.entity.Lesson;
+import org.akusher.crmfortutor.entity.LessonStatus;
+import org.akusher.crmfortutor.entity.StudentProfile;
+import org.akusher.crmfortutor.entity.User;
 import org.akusher.crmfortutor.exception.BadRequestException;
 import org.akusher.crmfortutor.exception.ResourceNotFoundException;
+import org.akusher.crmfortutor.dto.response.AttachmentResponse;
+import org.akusher.crmfortutor.entity.Attachment;
+import org.akusher.crmfortutor.mapper.AttachmentMapper;
 import org.akusher.crmfortutor.mapper.HomeworkMapper;
+import org.akusher.crmfortutor.repository.AttachmentRepository;
 import org.akusher.crmfortutor.repository.HomeworkRepository;
 import org.akusher.crmfortutor.repository.LessonRepository;
 import org.akusher.crmfortutor.repository.StudentProfileRepository;
+import org.akusher.crmfortutor.repository.UserRepository;
 import org.akusher.crmfortutor.security.CurrentUserProvider;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class HomeworkService {
@@ -26,15 +41,49 @@ public class HomeworkService {
     private final HomeworkRepository homeworkRepository;
     private final LessonRepository lessonRepository;
     private final StudentProfileRepository studentProfileRepository;
+    private final UserRepository userRepository;
     private final CurrentUserProvider currentUserProvider;
     private final HomeworkMapper homeworkMapper;
+    private final AttachmentRepository attachmentRepository;
+    private final AttachmentMapper attachmentMapper;
+    private final FileStorageService fileStorageService;
 
     @Transactional
     public HomeworkResponse createHomework(HomeworkCreateRequest request) {
         Long tutorId = currentUserProvider.getCurrentTutorId();
 
-        Lesson lesson = lessonRepository.findByIdAndTutorId(request.getLessonId(), tutorId)
-                .orElseThrow(() -> new ResourceNotFoundException("Lesson not found with id: " + request.getLessonId()));
+        Lesson lesson;
+        if (request.getLessonId() != null) {
+            lesson = lessonRepository.findByIdAndTutorId(request.getLessonId(), tutorId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Lesson not found with id: " + request.getLessonId()));
+        } else if (request.getStudentId() != null) {
+            StudentProfile student = studentProfileRepository.findByIdAndTutorId(request.getStudentId(), tutorId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + request.getStudentId()));
+
+            List<Lesson> studentLessons = lessonRepository.findByTutorIdAndFilters(tutorId, student.getId(), null, null);
+            if (!studentLessons.isEmpty()) {
+                lesson = studentLessons.get(studentLessons.size() - 1);
+            } else {
+                User tutor = userRepository.findById(tutorId)
+                        .orElseThrow(() -> new ResourceNotFoundException("Tutor not found with id: " + tutorId));
+                LocalDateTime now = LocalDateTime.now().withSecond(0).withNano(0);
+                lesson = Lesson.builder()
+                        .tutor(tutor)
+                        .student(student)
+                        .startTime(now)
+                        .endTime(now.plusHours(1))
+                        .status(LessonStatus.SCHEDULED)
+                        .topic(request.getTitle())
+                        .groupName(student.getGroupName())
+                        .build();
+                lesson = lessonRepository.save(lesson);
+            }
+        } else if (request.getGroupName() != null && !request.getGroupName().isBlank()) {
+            List<HomeworkResponse> groupHw = createGroupHomework(request);
+            return groupHw.get(0);
+        } else {
+            throw new BadRequestException("Необходимо указать ID урока (lessonId) или ID ученика (studentId)");
+        }
 
         Homework homework = Homework.builder()
                 .lesson(lesson)
@@ -48,6 +97,32 @@ public class HomeworkService {
         return homeworkMapper.toResponse(saved);
     }
 
+    @Transactional
+    public List<HomeworkResponse> createGroupHomework(HomeworkCreateRequest request) {
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+        if (request.getGroupName() == null || request.getGroupName().isBlank()) {
+            throw new BadRequestException("Название группы обязательно для группового домашнего задания");
+        }
+
+        String grp = request.getGroupName().trim();
+        List<StudentProfile> students = studentProfileRepository.findActiveByTutorIdAndGroupName(tutorId, grp);
+        if (students.isEmpty()) {
+            throw new BadRequestException("В группе '" + grp + "' не найдено активных учеников");
+        }
+
+        List<HomeworkResponse> responses = new ArrayList<>();
+        for (StudentProfile student : students) {
+            HomeworkCreateRequest singleRequest = HomeworkCreateRequest.builder()
+                    .studentId(student.getId())
+                    .title(request.getTitle())
+                    .description(request.getDescription())
+                    .deadline(request.getDeadline())
+                    .build();
+            responses.add(createHomework(singleRequest));
+        }
+        return responses;
+    }
+
     @Transactional(readOnly = true)
     public List<HomeworkResponse> getHomeworkByStudent(Long studentId) {
         Long tutorId = currentUserProvider.getCurrentTutorId();
@@ -57,7 +132,21 @@ public class HomeworkService {
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + studentId));
 
         List<Homework> homeworks = homeworkRepository.findByStudentIdAndTutorId(studentId, tutorId);
-        return homeworkMapper.toResponseList(homeworks);
+        List<HomeworkResponse> responses = homeworkMapper.toResponseList(homeworks);
+        populateAttachments(responses);
+        return responses;
+    }
+
+    @Transactional(readOnly = true)
+    public List<HomeworkResponse> getHomeworkByGroup(String groupName) {
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+        if (groupName == null || groupName.isBlank()) {
+            throw new BadRequestException("Название группы обязательно");
+        }
+        List<Homework> homeworks = homeworkRepository.findByGroupNameAndTutorId(groupName.trim(), tutorId);
+        List<HomeworkResponse> responses = homeworkMapper.toResponseList(homeworks);
+        populateAttachments(responses);
+        return responses;
     }
 
     @Transactional(readOnly = true)
@@ -67,7 +156,9 @@ public class HomeworkService {
         Homework homework = homeworkRepository.findByIdAndTutorId(id, tutorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Homework not found with id: " + id));
 
-        return homeworkMapper.toResponse(homework);
+        HomeworkResponse response = homeworkMapper.toResponse(homework);
+        response.setAttachments(attachmentMapper.toResponseList(attachmentRepository.findByHomeworkId(homework.getId())));
+        return response;
     }
 
     @Transactional
@@ -97,6 +188,44 @@ public class HomeworkService {
         }
 
         Homework updated = homeworkRepository.save(homework);
-        return homeworkMapper.toResponse(updated);
+        HomeworkResponse response = homeworkMapper.toResponse(updated);
+        response.setAttachments(attachmentMapper.toResponseList(attachmentRepository.findByHomeworkId(updated.getId())));
+        return response;
+    }
+
+    @Transactional
+    public void deleteHomework(Long id) {
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+
+        Homework homework = homeworkRepository.findByIdAndTutorId(id, tutorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Homework not found with id: " + id));
+
+        List<Attachment> attachments = attachmentRepository.findByHomeworkId(homework.getId());
+        for (Attachment attachment : attachments) {
+            try {
+                fileStorageService.delete(attachment.getFileName());
+            } catch (Exception e) {
+                log.warn("Failed to delete physical file {} for attachment {}: {}",
+                        attachment.getFileName(), attachment.getId(), e.getMessage());
+            }
+        }
+        if (!attachments.isEmpty()) {
+            attachmentRepository.deleteAll(attachments);
+            attachmentRepository.flush();
+        }
+
+        homeworkRepository.delete(homework);
+        homeworkRepository.flush();
+        log.info("Deleted homework {} and {} attachments by tutor {}", id, attachments.size(), tutorId);
+    }
+
+    private void populateAttachments(List<HomeworkResponse> responses) {
+        if (responses == null || responses.isEmpty()) return;
+        List<Long> ids = responses.stream().map(HomeworkResponse::getId).toList();
+        List<Attachment> allAttachments = attachmentRepository.findByHomeworkIdIn(ids);
+        Map<Long, List<AttachmentResponse>> byHomework = allAttachments.stream()
+                .map(attachmentMapper::toResponse)
+                .collect(Collectors.groupingBy(AttachmentResponse::getHomeworkId));
+        responses.forEach(r -> r.setAttachments(byHomework.getOrDefault(r.getId(), Collections.emptyList())));
     }
 }

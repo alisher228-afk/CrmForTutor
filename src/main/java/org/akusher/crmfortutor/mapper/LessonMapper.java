@@ -17,6 +17,7 @@ public interface LessonMapper {
     @Mapping(target = "studentId", source = "student.id")
     @Mapping(target = "studentFirstName", source = "student.firstName")
     @Mapping(target = "studentLastName", source = "student.lastName")
+    @Mapping(target = "studentName", expression = "java(entity.getStudent() != null ? ((entity.getStudent().getFirstName() != null ? entity.getStudent().getFirstName() : \"\") + \" \" + (entity.getStudent().getLastName() != null ? entity.getStudent().getLastName() : \"\")).trim() : null)")
     LessonResponse toResponse(Lesson entity);
 
     List<LessonResponse> toResponseList(List<Lesson> entities);
@@ -26,5 +27,6 @@ public interface LessonMapper {
     @Mapping(target = "student", ignore = true)
     @Mapping(target = "status", ignore = true)
     @Mapping(target = "reminderSentAt", ignore = true)
+    @Mapping(target = "cancellationReason", ignore = true)
     void updateEntityFromDto(LessonUpdateRequest request, @MappingTarget Lesson entity);
 }

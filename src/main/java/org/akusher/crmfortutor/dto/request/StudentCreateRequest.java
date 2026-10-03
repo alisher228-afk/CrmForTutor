@@ -38,6 +38,9 @@ public class StudentCreateRequest {
     @PositiveOrZero(message = "Hourly rate must be greater than or equal to 0")
     private BigDecimal hourlyRate;
 
+    @Size(max = 100, message = "Group name must not exceed 100 characters")
+    private String groupName;
+
     @Min(value = 0, message = "Initial lesson balance cannot be negative")
     @Builder.Default
     private Integer lessonBalance = 0;

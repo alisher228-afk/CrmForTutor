@@ -8,6 +8,7 @@ import lombok.Setter;
 import org.akusher.crmfortutor.entity.HomeworkStatus;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Setter
@@ -17,9 +18,13 @@ import java.time.LocalDateTime;
 public class HomeworkResponse {
     private Long id;
     private Long lessonId;
+    private Long studentId;
+    private String studentName;
+    private String groupName;
     private String title;
     private String description;
     private LocalDateTime deadline;
     private HomeworkStatus status;
     private String studentNotes;
+    private List<AttachmentResponse> attachments;
 }

@@ -19,6 +19,7 @@ public interface StudentMapper {
 
     @Mapping(target = "userId", source = "user.id")
     @Mapping(target = "tutorId", source = "tutor.id")
+    @Mapping(target = "tutorEmail", source = "tutor.email")
     StudentSelfResponse toSelfResponse(StudentProfile entity);
 
     @Mapping(target = "id", ignore = true)

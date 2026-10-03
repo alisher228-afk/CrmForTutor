@@ -4,6 +4,8 @@ import org.akusher.crmfortutor.dto.request.LessonCreateRequest;
 import org.akusher.crmfortutor.dto.request.LessonStatusUpdateRequest;
 import org.akusher.crmfortutor.dto.request.LessonUpdateRequest;
 import org.akusher.crmfortutor.dto.response.LessonResponse;
+import org.akusher.crmfortutor.entity.Attachment;
+import org.akusher.crmfortutor.entity.Homework;
 import org.akusher.crmfortutor.entity.Lesson;
 import org.akusher.crmfortutor.entity.LessonStatus;
 import org.akusher.crmfortutor.entity.StudentProfile;
@@ -11,6 +13,8 @@ import org.akusher.crmfortutor.entity.User;
 import org.akusher.crmfortutor.exception.BadRequestException;
 import org.akusher.crmfortutor.exception.ResourceNotFoundException;
 import org.akusher.crmfortutor.mapper.LessonMapper;
+import org.akusher.crmfortutor.repository.AttachmentRepository;
+import org.akusher.crmfortutor.repository.HomeworkRepository;
 import org.akusher.crmfortutor.repository.LessonRepository;
 import org.akusher.crmfortutor.repository.StudentProfileRepository;
 import org.akusher.crmfortutor.repository.UserRepository;
@@ -24,6 +28,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +51,12 @@ class LessonServiceTest {
     private CurrentUserProvider currentUserProvider;
     @Mock
     private LessonMapper lessonMapper;
+    @Mock
+    private HomeworkRepository homeworkRepository;
+    @Mock
+    private AttachmentRepository attachmentRepository;
+    @Mock
+    private FileStorageService fileStorageService;
 
     @InjectMocks
     private LessonService lessonService;
@@ -437,5 +448,73 @@ class LessonServiceTest {
         assertThat(student.getLessonBalance()).isEqualTo(2);
         verify(studentProfileRepository, never()).save(any());
         verify(lessonRepository).delete(lesson);
+    }
+
+    @Test
+    @DisplayName("deleteLesson - cascades deletion of homework and attachments")
+    void deleteLesson_CascadesHomeworkAndAttachments() {
+        lesson.setStatus(LessonStatus.SCHEDULED);
+        Homework hw = Homework.builder().id(99L).lesson(lesson).title("Task").build();
+        Attachment att = Attachment.builder().id(199L).homework(hw).fileName("file.pdf").build();
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(lessonRepository.findByIdAndTutorId(10L, tutorId)).thenReturn(Optional.of(lesson));
+        when(homeworkRepository.findByLessonId(10L)).thenReturn(List.of(hw));
+        when(attachmentRepository.findByHomeworkId(99L)).thenReturn(List.of(att));
+
+        lessonService.deleteLesson(10L);
+
+        verify(fileStorageService).delete("file.pdf");
+        verify(attachmentRepository).deleteAll(List.of(att));
+        verify(attachmentRepository).flush();
+        verify(homeworkRepository).delete(hw);
+        verify(homeworkRepository).flush();
+        verify(lessonRepository).delete(lesson);
+    }
+
+    @Test
+    @DisplayName("getLessons - succeeds without from and to filters")
+    void getLessons_WithoutFilters_Success() {
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(lessonRepository.findByTutorIdAndFilters(tutorId, null, null, null)).thenReturn(List.of(lesson));
+        when(lessonMapper.toResponseList(any())).thenReturn(List.of(LessonResponse.builder().id(10L).build()));
+
+        List<LessonResponse> result = lessonService.getLessons(null, null);
+
+        assertThat(result).hasSize(1);
+        verify(lessonRepository).findByTutorIdAndFilters(tutorId, null, null, null);
+    }
+
+    @Test
+    @DisplayName("createLesson - group lesson creates lessons for all active students in group")
+    void createLesson_Group_Success() {
+        StudentProfile s1 = StudentProfile.builder().id(101L).firstName("Anna").groupName("Group-A").build();
+        StudentProfile s2 = StudentProfile.builder().id(102L).firstName("Boris").groupName("Group-A").build();
+
+        LocalDateTime start = LocalDateTime.of(2026, 9, 22, 10, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 9, 22, 11, 0);
+
+        LessonCreateRequest request = LessonCreateRequest.builder()
+                .groupName("Group-A")
+                .startTime(start)
+                .endTime(end)
+                .topic("Group Grammar")
+                .build();
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(userRepository.findById(tutorId)).thenReturn(Optional.of(tutor));
+        when(studentProfileRepository.findActiveByTutorIdAndGroupName(tutorId, "Group-A")).thenReturn(List.of(s1, s2));
+        when(lessonRepository.existsConflictingLesson(101L, start, end, null)).thenReturn(false);
+        when(lessonRepository.existsConflictingLesson(102L, start, end, null)).thenReturn(false);
+        when(lessonRepository.saveAll(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        LessonResponse resp1 = LessonResponse.builder().id(1L).groupName("Group-A").build();
+        LessonResponse resp2 = LessonResponse.builder().id(2L).groupName("Group-A").build();
+        when(lessonMapper.toResponseList(any())).thenReturn(List.of(resp1, resp2));
+
+        List<LessonResponse> groupLessons = lessonService.createGroupLesson(request);
+
+        assertThat(groupLessons).hasSize(2);
+        verify(lessonRepository).saveAll(any());
     }
 }

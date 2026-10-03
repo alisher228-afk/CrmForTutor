@@ -28,4 +28,7 @@ public class LessonUpdateRequest {
 
     @Size(max = 500, message = "Meeting URL must not exceed 500 characters")
     private String meetingUrl;
+
+    @Size(max = 100, message = "Group name must not exceed 100 characters")
+    private String groupName;
 }

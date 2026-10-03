@@ -60,6 +60,9 @@ public class StudentProfile {
     @Column(name = "hourly_rate", precision = 10, scale = 2)
     private BigDecimal hourlyRate;
 
+    @Column(name = "group_name", length = 100)
+    private String groupName;
+
     @Column(name = "lesson_balance", nullable = false)
     @Builder.Default
     private Integer lessonBalance = 0;

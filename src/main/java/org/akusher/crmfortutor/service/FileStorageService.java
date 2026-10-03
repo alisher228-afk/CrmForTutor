@@ -9,5 +9,7 @@ public interface FileStorageService {
 
     Resource load(String fileName);
 
+    String copy(String sourceFileName);
+
     void delete(String fileName);
 }

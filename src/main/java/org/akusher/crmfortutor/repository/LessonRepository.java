@@ -11,10 +11,50 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import jakarta.persistence.criteria.Predicate;
+import java.util.ArrayList;
+
 @Repository
-public interface LessonRepository extends JpaRepository<Lesson, Long> {
+public interface LessonRepository extends JpaRepository<Lesson, Long>, JpaSpecificationExecutor<Lesson> {
 
     Optional<Lesson> findByIdAndTutorId(Long id, Long tutorId);
+
+    default List<Lesson> findByTutorIdAndFilters(Long tutorId, Long studentId, LocalDateTime from, LocalDateTime to) {
+        Specification<Lesson> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("tutor").get("id"), tutorId));
+            if (studentId != null) {
+                predicates.add(cb.equal(root.get("student").get("id"), studentId));
+            }
+            if (from != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("startTime"), from));
+            }
+            if (to != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("startTime"), to));
+            }
+            query.orderBy(cb.asc(root.get("startTime")));
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+        return findAll(spec);
+    }
+
+    default List<Lesson> findByStudentIdAndFilters(Long studentId, LocalDateTime from, LocalDateTime to) {
+        Specification<Lesson> spec = (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.equal(root.get("student").get("id"), studentId));
+            if (from != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("startTime"), from));
+            }
+            if (to != null) {
+                predicates.add(cb.lessThanOrEqualTo(root.get("startTime"), to));
+            }
+            query.orderBy(cb.asc(root.get("startTime")));
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+        return findAll(spec);
+    }
 
     @Query("""
         SELECT l FROM Lesson l

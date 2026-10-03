@@ -37,4 +37,16 @@ public interface HomeworkRepository extends JpaRepository<Homework, Long> {
         ORDER BY h.deadline ASC NULLS LAST, h.id DESC
     """)
     List<Homework> findByStudentId(@Param("studentId") Long studentId);
+
+    List<Homework> findByLessonId(Long lessonId);
+
+    @Query("""
+        SELECT h FROM Homework h
+        WHERE h.lesson.tutor.id = :tutorId
+          AND (h.lesson.groupName = :groupName OR (h.lesson.student.groupName = :groupName AND (h.lesson.groupName IS NULL OR h.lesson.groupName = '')))
+        ORDER BY h.deadline ASC NULLS LAST, h.id DESC
+    """)
+    List<Homework> findByGroupNameAndTutorId(
+            @Param("groupName") String groupName,
+            @Param("tutorId") Long tutorId);
 }

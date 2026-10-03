@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="014-1-add-cancellation-reason-to-lessons" author="akusher">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="lessons" columnName="cancellation_reason"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="lessons">
+            <column name="cancellation_reason" type="VARCHAR(500)"/>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

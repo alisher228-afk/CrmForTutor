@@ -2,33 +2,33 @@ package org.akusher.crmfortutor.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.time.LocalDateTime;
+import org.akusher.crmfortutor.entity.TestType;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class HomeworkCreateRequest {
-
-    private Long lessonId;
-
-    private Long studentId;
-
-    private String groupName;
+public class TestCreateRequest {
 
     @NotBlank(message = "Title is required")
-    @Size(max = 255, message = "Title must not exceed 255 characters")
     private String title;
 
     private String description;
 
-    private LocalDateTime deadline;
+    private String topic;
+
+    @NotNull(message = "Type is required")
+    private TestType type;
+
+    private String externalUrl;
+
+    private String questionsJson;
+
+    private Integer timeLimitMinutes;
 }

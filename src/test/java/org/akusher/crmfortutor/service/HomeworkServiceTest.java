@@ -1,5 +1,6 @@
 package org.akusher.crmfortutor.service;
 
+import org.akusher.crmfortutor.dto.request.HomeworkCreateRequest;
 import org.akusher.crmfortutor.dto.request.HomeworkStatusUpdateRequest;
 import org.akusher.crmfortutor.dto.response.HomeworkResponse;
 import org.akusher.crmfortutor.entity.Homework;
@@ -7,9 +8,13 @@ import org.akusher.crmfortutor.entity.HomeworkStatus;
 import org.akusher.crmfortutor.entity.Lesson;
 import org.akusher.crmfortutor.entity.StudentProfile;
 import org.akusher.crmfortutor.entity.User;
+import org.akusher.crmfortutor.repository.UserRepository;
+import java.util.List;
 import org.akusher.crmfortutor.exception.BadRequestException;
 import org.akusher.crmfortutor.exception.ResourceNotFoundException;
+import org.akusher.crmfortutor.mapper.AttachmentMapper;
 import org.akusher.crmfortutor.mapper.HomeworkMapper;
+import org.akusher.crmfortutor.repository.AttachmentRepository;
 import org.akusher.crmfortutor.repository.HomeworkRepository;
 import org.akusher.crmfortutor.repository.LessonRepository;
 import org.akusher.crmfortutor.repository.StudentProfileRepository;
@@ -27,6 +32,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -40,9 +46,17 @@ class HomeworkServiceTest {
     @Mock
     private StudentProfileRepository studentProfileRepository;
     @Mock
+    private UserRepository userRepository;
+    @Mock
     private CurrentUserProvider currentUserProvider;
     @Mock
     private HomeworkMapper homeworkMapper;
+    @Mock
+    private AttachmentRepository attachmentRepository;
+    @Mock
+    private AttachmentMapper attachmentMapper;
+    @Mock
+    private FileStorageService fileStorageService;
 
     @InjectMocks
     private HomeworkService homeworkService;
@@ -178,5 +192,131 @@ class HomeworkServiceTest {
         assertThatThrownBy(() -> homeworkService.updateHomeworkStatus(50L, request))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("Homework is already reviewed");
+    }
+
+    @Test
+    @DisplayName("createHomework - success with lessonId")
+    void createHomework_WithLessonId_Success() {
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(lessonRepository.findByIdAndTutorId(5L, tutorId)).thenReturn(Optional.of(homework.getLesson()));
+        when(homeworkRepository.save(any(Homework.class))).thenAnswer(inv -> {
+            Homework h = inv.getArgument(0);
+            h.setId(100L);
+            return h;
+        });
+
+        HomeworkResponse response = HomeworkResponse.builder().id(100L).title("Test HW").build();
+        when(homeworkMapper.toResponse(any(Homework.class))).thenReturn(response);
+
+        HomeworkCreateRequest request = HomeworkCreateRequest.builder()
+                .lessonId(5L)
+                .title("Test HW")
+                .description("Description")
+                .build();
+
+        HomeworkResponse result = homeworkService.createHomework(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(100L);
+        verify(homeworkRepository).save(any(Homework.class));
+    }
+
+    @Test
+    @DisplayName("createHomework - success with studentId when existing lesson is found")
+    void createHomework_WithStudentId_ExistingLesson() {
+        StudentProfile student = StudentProfile.builder().id(2L).firstName("Oleg").build();
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(studentProfileRepository.findByIdAndTutorId(2L, tutorId)).thenReturn(Optional.of(student));
+        when(lessonRepository.findByTutorIdAndFilters(tutorId, 2L, null, null)).thenReturn(List.of(homework.getLesson()));
+        when(homeworkRepository.save(any(Homework.class))).thenAnswer(inv -> {
+            Homework h = inv.getArgument(0);
+            h.setId(101L);
+            return h;
+        });
+
+        HomeworkResponse response = HomeworkResponse.builder().id(101L).title("Student HW").build();
+        when(homeworkMapper.toResponse(any(Homework.class))).thenReturn(response);
+
+        HomeworkCreateRequest request = HomeworkCreateRequest.builder()
+                .studentId(2L)
+                .title("Student HW")
+                .build();
+
+        HomeworkResponse result = homeworkService.createHomework(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(101L);
+        verify(homeworkRepository).save(any(Homework.class));
+    }
+
+    @Test
+    @DisplayName("createHomework - success with studentId when no lessons exist (auto-creates lesson)")
+    void createHomework_WithStudentId_AutoCreatesLesson() {
+        StudentProfile student = StudentProfile.builder().id(2L).firstName("Oleg").build();
+        User tutor = User.builder().id(tutorId).build();
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(studentProfileRepository.findByIdAndTutorId(2L, tutorId)).thenReturn(Optional.of(student));
+        when(lessonRepository.findByTutorIdAndFilters(tutorId, 2L, null, null)).thenReturn(List.of());
+        when(userRepository.findById(tutorId)).thenReturn(Optional.of(tutor));
+        when(lessonRepository.save(any(Lesson.class))).thenAnswer(inv -> {
+            Lesson l = inv.getArgument(0);
+            l.setId(999L);
+            return l;
+        });
+        when(homeworkRepository.save(any(Homework.class))).thenAnswer(inv -> {
+            Homework h = inv.getArgument(0);
+            h.setId(102L);
+            return h;
+        });
+
+        HomeworkResponse response = HomeworkResponse.builder().id(102L).title("Auto-created HW").build();
+        when(homeworkMapper.toResponse(any(Homework.class))).thenReturn(response);
+
+        HomeworkCreateRequest request = HomeworkCreateRequest.builder()
+                .studentId(2L)
+                .title("Auto-created HW")
+                .build();
+
+        HomeworkResponse result = homeworkService.createHomework(request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(102L);
+        verify(lessonRepository).save(any(Lesson.class));
+        verify(homeworkRepository).save(any(Homework.class));
+    }
+
+    @Test
+    @DisplayName("deleteHomework - success deletes attachments and homework")
+    void deleteHomework_Success() {
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(homeworkRepository.findByIdAndTutorId(50L, tutorId)).thenReturn(Optional.of(homework));
+
+        org.akusher.crmfortutor.entity.Attachment att = org.akusher.crmfortutor.entity.Attachment.builder()
+                .id(10L)
+                .homework(homework)
+                .fileName("stored_file.pdf")
+                .originalFileName("test.pdf")
+                .build();
+        when(attachmentRepository.findByHomeworkId(50L)).thenReturn(List.of(att));
+
+        homeworkService.deleteHomework(50L);
+
+        verify(fileStorageService).delete("stored_file.pdf");
+        verify(attachmentRepository).deleteAll(List.of(att));
+        verify(attachmentRepository).flush();
+        verify(homeworkRepository).delete(homework);
+        verify(homeworkRepository).flush();
+    }
+
+    @Test
+    @DisplayName("deleteHomework - throws ResourceNotFoundException when homework not found")
+    void deleteHomework_NotFound() {
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(homeworkRepository.findByIdAndTutorId(999L, tutorId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> homeworkService.deleteHomework(999L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Homework not found");
     }
 }

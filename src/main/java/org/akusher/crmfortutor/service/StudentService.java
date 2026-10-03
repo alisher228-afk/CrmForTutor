@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.akusher.crmfortutor.config.TelegramProperties;
 import org.akusher.crmfortutor.dto.request.StudentCreateRequest;
 import org.akusher.crmfortutor.dto.request.StudentUpdateRequest;
+import org.akusher.crmfortutor.dto.response.StudentGroupResponse;
 import org.akusher.crmfortutor.dto.response.StudentInviteResponse;
 import org.akusher.crmfortutor.dto.response.StudentResponse;
 import org.akusher.crmfortutor.dto.response.TelegramLinkCodeResponse;
@@ -24,9 +25,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -39,12 +44,46 @@ public class StudentService {
     private final TelegramProperties telegramProperties;
 
     @Transactional(readOnly = true)
-    public Page<StudentResponse> getStudents(String search, StudentStatus status, Pageable pageable) {
+    public Page<StudentResponse> getStudents(String search, StudentStatus status, String format, String groupName, Pageable pageable) {
         Long tutorId = currentUserProvider.getCurrentTutorId();
         StudentStatus targetStatus = (status != null) ? status : StudentStatus.ACTIVE;
-        Page<StudentProfile> students = studentProfileRepository.findActiveStudents(tutorId, targetStatus, search, pageable);
+        Page<StudentProfile> students = studentProfileRepository.findActiveStudents(tutorId, targetStatus, format, groupName, search, pageable);
         return students.map(studentMapper::toResponse);
     }
+
+    @Transactional(readOnly = true)
+    public Page<StudentResponse> getStudents(String search, StudentStatus status, Pageable pageable) {
+        return getStudents(search, status, null, null, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public List<StudentGroupResponse> getGroups() {
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+        List<StudentProfile> groupStudents = studentProfileRepository.findAllActiveGroupStudents(tutorId);
+
+        Map<String, List<StudentProfile>> byGroup = groupStudents.stream()
+                .filter(s -> s.getGroupName() != null && !s.getGroupName().trim().isBlank())
+                .collect(Collectors.groupingBy(s -> s.getGroupName().trim(), LinkedHashMap::new, Collectors.toList()));
+
+        return byGroup.entrySet().stream()
+                .map(entry -> StudentGroupResponse.builder()
+                        .name(entry.getKey())
+                        .studentCount(entry.getValue().size())
+                        .students(entry.getValue().stream().map(studentMapper::toResponse).toList())
+                        .build())
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<StudentResponse> getStudentsByGroup(String groupName) {
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+        if (groupName == null || groupName.trim().isBlank()) {
+            return List.of();
+        }
+        List<StudentProfile> students = studentProfileRepository.findActiveByTutorIdAndGroupName(tutorId, groupName.trim());
+        return students.stream().map(studentMapper::toResponse).toList();
+    }
+
 
     @Transactional(readOnly = true)
     public StudentResponse getStudentById(Long id) {
@@ -77,6 +116,17 @@ public class StudentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + id));
 
         studentMapper.updateEntityFromDto(request, student);
+
+        // Explicitly handle groupName because MapStruct IGNORE null strategy preserves old values
+        if (request.getGroupName() == null || request.getGroupName().isBlank()) {
+            student.setGroupName(null);
+        } else {
+            student.setGroupName(request.getGroupName().trim());
+        }
+
+        if (request.getStatus() != null) {
+            student.setStatus(request.getStatus());
+        }
 
         StudentProfile updated = studentProfileRepository.save(student);
         return studentMapper.toResponse(updated);

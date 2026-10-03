@@ -25,5 +25,7 @@ public class StudentSelfResponse {
     private String currentLevel;
     private BigDecimal hourlyRate;
     private Integer lessonBalance;
+    private String groupName;
     private StudentStatus status;
+    private String tutorEmail;
 }

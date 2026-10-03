@@ -1,6 +1,7 @@
 package org.akusher.crmfortutor.service;
 
 import org.akusher.crmfortutor.dto.request.HomeworkSubmitRequest;
+import org.akusher.crmfortutor.dto.request.LessonCancelRequest;
 import org.akusher.crmfortutor.dto.response.HomeworkResponse;
 import org.akusher.crmfortutor.dto.response.LessonResponse;
 import org.akusher.crmfortutor.dto.response.PaymentResponse;
@@ -9,15 +10,18 @@ import org.akusher.crmfortutor.dto.response.StudentSelfResponse;
 import org.akusher.crmfortutor.entity.Homework;
 import org.akusher.crmfortutor.entity.HomeworkStatus;
 import org.akusher.crmfortutor.entity.Lesson;
+import org.akusher.crmfortutor.entity.LessonStatus;
 import org.akusher.crmfortutor.entity.Payment;
 import org.akusher.crmfortutor.entity.StudentProfile;
 import org.akusher.crmfortutor.entity.User;
 import org.akusher.crmfortutor.exception.BadRequestException;
 import org.akusher.crmfortutor.exception.ResourceNotFoundException;
+import org.akusher.crmfortutor.mapper.AttachmentMapper;
 import org.akusher.crmfortutor.mapper.HomeworkMapper;
 import org.akusher.crmfortutor.mapper.LessonMapper;
 import org.akusher.crmfortutor.mapper.PaymentMapper;
 import org.akusher.crmfortutor.mapper.StudentMapper;
+import org.akusher.crmfortutor.repository.AttachmentRepository;
 import org.akusher.crmfortutor.repository.HomeworkRepository;
 import org.akusher.crmfortutor.repository.LessonRepository;
 import org.akusher.crmfortutor.repository.PaymentRepository;
@@ -60,6 +64,10 @@ class StudentSelfServiceTest {
     private HomeworkMapper homeworkMapper;
     @Mock
     private PaymentMapper paymentMapper;
+    @Mock
+    private AttachmentRepository attachmentRepository;
+    @Mock
+    private AttachmentMapper attachmentMapper;
 
     @InjectMocks
     private StudentSelfService studentSelfService;
@@ -117,7 +125,7 @@ class StudentSelfServiceTest {
 
         Lesson lesson = Lesson.builder().id(100L).topic("Chemistry").build();
         List<Lesson> lessons = List.of(lesson);
-        when(lessonRepository.findByStudentIdAndInterval(10L, from, to)).thenReturn(lessons);
+        when(lessonRepository.findByStudentIdAndFilters(10L, from, to)).thenReturn(lessons);
 
         LessonResponse lessonResponse = LessonResponse.builder().id(100L).topic("Chemistry").build();
         when(lessonMapper.toResponseList(lessons)).thenReturn(List.of(lessonResponse));
@@ -126,22 +134,14 @@ class StudentSelfServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getTopic()).isEqualTo("Chemistry");
-        verify(lessonRepository).findByStudentIdAndInterval(10L, from, to);
+        verify(lessonRepository).findByStudentIdAndFilters(10L, from, to);
     }
 
     @Test
-    @DisplayName("getLessons - throws BadRequestException when from or to is null or to < from")
+    @DisplayName("getLessons - throws BadRequestException when to < from")
     void getLessons_InvalidInterval() {
         LocalDateTime from = LocalDateTime.of(2026, 9, 10, 0, 0);
         LocalDateTime to = LocalDateTime.of(2026, 9, 5, 0, 0);
-
-        assertThatThrownBy(() -> studentSelfService.getLessons(null, to))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Parameters 'from' and 'to' are required");
-
-        assertThatThrownBy(() -> studentSelfService.getLessons(from, null))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Parameters 'from' and 'to' are required");
 
         assertThatThrownBy(() -> studentSelfService.getLessons(from, to))
                 .isInstanceOf(BadRequestException.class)
@@ -297,5 +297,78 @@ class StudentSelfServiceTest {
         assertThatThrownBy(() -> studentSelfService.submitHomework(200L, request))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("Homework is already reviewed");
+    }
+
+    @Test
+    @DisplayName("cancelLesson - success when more than 12 hours remaining")
+    void cancelLesson_Success_MoreThan12Hours() {
+        when(currentStudentProvider.getCurrentStudentProfile()).thenReturn(student);
+
+        Lesson lesson = Lesson.builder()
+                .id(100L)
+                .student(student)
+                .status(LessonStatus.SCHEDULED)
+                .startTime(LocalDateTime.now().plusHours(24))
+                .build();
+        when(lessonRepository.findById(100L)).thenReturn(Optional.of(lesson));
+        when(lessonRepository.save(lesson)).thenReturn(lesson);
+
+        LessonResponse response = LessonResponse.builder()
+                .id(100L)
+                .status(LessonStatus.CANCELLED_BY_STUDENT)
+                .cancellationReason("Illness")
+                .build();
+        when(lessonMapper.toResponse(lesson)).thenReturn(response);
+
+        LessonCancelRequest request = new LessonCancelRequest("Illness");
+        LessonResponse result = studentSelfService.cancelLesson(100L, request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getStatus()).isEqualTo(LessonStatus.CANCELLED_BY_STUDENT);
+        assertThat(result.getCancellationReason()).isEqualTo("Illness");
+        assertThat(lesson.getStatus()).isEqualTo(LessonStatus.CANCELLED_BY_STUDENT);
+        assertThat(lesson.getCancellationReason()).isEqualTo("Illness");
+        verify(lessonRepository).save(lesson);
+    }
+
+    @Test
+    @DisplayName("cancelLesson - throws BadRequestException when less than 12 hours remaining")
+    void cancelLesson_LateCancellation_LessThan12Hours_ThrowsBadRequest() {
+        when(currentStudentProvider.getCurrentStudentProfile()).thenReturn(student);
+
+        Lesson lesson = Lesson.builder()
+                .id(100L)
+                .student(student)
+                .status(LessonStatus.SCHEDULED)
+                .startTime(LocalDateTime.now().plusHours(5))
+                .build();
+        when(lessonRepository.findById(100L)).thenReturn(Optional.of(lesson));
+
+        LessonCancelRequest request = new LessonCancelRequest("Emergency");
+
+        assertThatThrownBy(() -> studentSelfService.cancelLesson(100L, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("менее 12 часов");
+    }
+
+    @Test
+    @DisplayName("cancelLesson - throws BadRequestException when lesson belongs to another student")
+    void cancelLesson_BelongsToAnotherStudent_ThrowsBadRequest() {
+        when(currentStudentProvider.getCurrentStudentProfile()).thenReturn(student);
+
+        StudentProfile otherStudent = StudentProfile.builder().id(999L).build();
+        Lesson lesson = Lesson.builder()
+                .id(100L)
+                .student(otherStudent)
+                .status(LessonStatus.SCHEDULED)
+                .startTime(LocalDateTime.now().plusHours(24))
+                .build();
+        when(lessonRepository.findById(100L)).thenReturn(Optional.of(lesson));
+
+        LessonCancelRequest request = new LessonCancelRequest("Illness");
+
+        assertThatThrownBy(() -> studentSelfService.cancelLesson(100L, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("не принадлежит вам");
     }
 }

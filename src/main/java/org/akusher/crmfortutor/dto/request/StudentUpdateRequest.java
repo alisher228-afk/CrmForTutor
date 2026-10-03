@@ -39,8 +39,10 @@ public class StudentUpdateRequest {
     @PositiveOrZero(message = "Hourly rate must be greater than or equal to 0")
     private BigDecimal hourlyRate;
 
+    @Size(max = 100, message = "Group name must not exceed 100 characters")
+    private String groupName;
+
     private String notes;
 
-    @NotNull(message = "Status is required")
     private StudentStatus status;
 }

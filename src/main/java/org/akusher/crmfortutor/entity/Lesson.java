@@ -57,6 +57,12 @@ public class Lesson {
     @Column(name = "meeting_url", length = 500)
     private String meetingUrl;
 
+    @Column(name = "group_name", length = 100)
+    private String groupName;
+
+    @Column(name = "cancellation_reason", length = 500)
+    private String cancellationReason;
+
     @Column(name = "reminder_sent_at")
     private Instant reminderSentAt;
 }

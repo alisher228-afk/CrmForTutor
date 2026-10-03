@@ -15,5 +15,10 @@
     <include file="008-add-telegram-chat-id.xml" relativeToChangelogFile="true"/>
     <include file="009-add-lesson-reminder.xml" relativeToChangelogFile="true"/>
     <include file="010-add-indexes.xml" relativeToChangelogFile="true"/>
+    <include file="011-add-group-name.xml" relativeToChangelogFile="true"/>
+    <include file="012-create-teaching-materials.xml" relativeToChangelogFile="true"/>
+    <include file="013-create-tests.xml" relativeToChangelogFile="true"/>
+    <include file="014-add-cancellation-reason.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
+
