@@ -3,12 +3,17 @@ package org.akusher.crmfortutor.service;
 import org.akusher.crmfortutor.dto.request.HomeworkCreateRequest;
 import org.akusher.crmfortutor.dto.request.HomeworkStatusUpdateRequest;
 import org.akusher.crmfortutor.dto.response.HomeworkResponse;
+import org.akusher.crmfortutor.dto.response.HomeworkStatsResponse;
 import org.akusher.crmfortutor.entity.Homework;
 import org.akusher.crmfortutor.entity.HomeworkStatus;
 import org.akusher.crmfortutor.entity.Lesson;
 import org.akusher.crmfortutor.entity.StudentProfile;
 import org.akusher.crmfortutor.entity.User;
 import org.akusher.crmfortutor.repository.UserRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import java.util.List;
 import org.akusher.crmfortutor.exception.BadRequestException;
 import org.akusher.crmfortutor.exception.ResourceNotFoundException;
@@ -33,6 +38,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -318,5 +324,72 @@ class HomeworkServiceTest {
         assertThatThrownBy(() -> homeworkService.deleteHomework(999L))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Homework not found");
+    }
+
+    @Test
+    @DisplayName("getHomeworkByStudent - paginated with filters")
+    void getHomeworkByStudent_Paginated_Success() {
+        StudentProfile student = StudentProfile.builder().id(2L).firstName("Oleg").build();
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(studentProfileRepository.findByIdAndTutorId(2L, tutorId)).thenReturn(Optional.of(student));
+
+        Page<Homework> homeworkPage = new PageImpl<>(List.of(homework));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(homeworkRepository.findByStudentIdAndTutorIdWithFilters(eq(2L), eq(tutorId), eq(HomeworkStatus.ASSIGNED), eq("Math"), eq(pageable)))
+                .thenReturn(homeworkPage);
+
+        HomeworkResponse response = HomeworkResponse.builder().id(50L).title("Math Homework #3").build();
+        when(homeworkMapper.toResponse(homework)).thenReturn(response);
+
+        Page<HomeworkResponse> result = homeworkService.getHomeworkByStudent(2L, HomeworkStatus.ASSIGNED, "Math", pageable);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).getTitle()).isEqualTo("Math Homework #3");
+        verify(homeworkRepository).findByStudentIdAndTutorIdWithFilters(2L, tutorId, HomeworkStatus.ASSIGNED, "Math", pageable);
+    }
+
+    @Test
+    @DisplayName("getHomeworkStatsByStudent - success")
+    void getHomeworkStatsByStudent_Success() {
+        StudentProfile student = StudentProfile.builder().id(2L).firstName("Oleg").build();
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(studentProfileRepository.findByIdAndTutorId(2L, tutorId)).thenReturn(Optional.of(student));
+
+        List<Object[]> counts = List.of(
+                new Object[]{HomeworkStatus.ASSIGNED, 4L},
+                new Object[]{HomeworkStatus.SUBMITTED, 1L},
+                new Object[]{HomeworkStatus.REVIEWED, 10L}
+        );
+        when(homeworkRepository.countByStatusForStudentAndTutor(2L, tutorId)).thenReturn(counts);
+
+        HomeworkStatsResponse stats = homeworkService.getHomeworkStatsByStudent(2L);
+
+        assertThat(stats).isNotNull();
+        assertThat(stats.getTotalCount()).isEqualTo(15L);
+        assertThat(stats.getAssignedCount()).isEqualTo(4L);
+        assertThat(stats.getSubmittedCount()).isEqualTo(1L);
+        assertThat(stats.getReviewedCount()).isEqualTo(10L);
+    }
+
+    @Test
+    @DisplayName("getHomeworkListByStudent - returns unpaged list with filters")
+    void getHomeworkListByStudent_Success() {
+        StudentProfile student = StudentProfile.builder().id(2L).firstName("Oleg").build();
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(studentProfileRepository.findByIdAndTutorId(2L, tutorId)).thenReturn(Optional.of(student));
+
+        List<Homework> homeworkList = List.of(homework);
+        when(homeworkRepository.findByStudentIdAndTutorIdWithFiltersList(2L, tutorId, HomeworkStatus.ASSIGNED, "Math"))
+                .thenReturn(homeworkList);
+
+        HomeworkResponse response = HomeworkResponse.builder().id(50L).title("Math Homework #3").build();
+        when(homeworkMapper.toResponseList(homeworkList)).thenReturn(List.of(response));
+
+        List<HomeworkResponse> result = homeworkService.getHomeworkListByStudent(2L, HomeworkStatus.ASSIGNED, "Math");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getTitle()).isEqualTo("Math Homework #3");
+        verify(homeworkRepository).findByStudentIdAndTutorIdWithFiltersList(2L, tutorId, HomeworkStatus.ASSIGNED, "Math");
     }
 }

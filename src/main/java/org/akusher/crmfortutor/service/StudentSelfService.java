@@ -3,11 +3,14 @@ package org.akusher.crmfortutor.service;
 import lombok.RequiredArgsConstructor;
 import org.akusher.crmfortutor.dto.request.HomeworkSubmitRequest;
 import org.akusher.crmfortutor.dto.response.HomeworkResponse;
+import org.akusher.crmfortutor.dto.response.HomeworkStatsResponse;
 import org.akusher.crmfortutor.dto.response.LessonResponse;
 import org.akusher.crmfortutor.dto.response.StudentPaymentsResponse;
 import org.akusher.crmfortutor.dto.response.StudentSelfResponse;
 import org.akusher.crmfortutor.entity.Homework;
 import org.akusher.crmfortutor.entity.HomeworkStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.akusher.crmfortutor.entity.Lesson;
 import org.akusher.crmfortutor.entity.Payment;
 import org.akusher.crmfortutor.entity.StudentProfile;
@@ -77,12 +80,40 @@ public class StudentSelfService {
     }
 
     @Transactional(readOnly = true)
+    public Page<HomeworkResponse> getHomework(HomeworkStatus status, String search, Pageable pageable) {
+        StudentProfile student = currentStudentProvider.getCurrentStudentProfile();
+        Page<Homework> homeworks = homeworkRepository.findByStudentIdWithFilters(student.getId(), status, search, pageable);
+        Page<HomeworkResponse> responses = homeworks.map(homeworkMapper::toResponse);
+        populateAttachments(responses.getContent());
+        return responses;
+    }
+
+    @Transactional(readOnly = true)
     public List<HomeworkResponse> getHomework() {
         StudentProfile student = currentStudentProvider.getCurrentStudentProfile();
         List<Homework> homeworks = homeworkRepository.findByStudentId(student.getId());
         List<HomeworkResponse> responses = homeworkMapper.toResponseList(homeworks);
         populateAttachments(responses);
         return responses;
+    }
+
+    @Transactional(readOnly = true)
+    public List<HomeworkResponse> getHomeworkList(HomeworkStatus status, String search) {
+        if (status == null && (search == null || search.isBlank())) {
+            return getHomework();
+        }
+        StudentProfile student = currentStudentProvider.getCurrentStudentProfile();
+        List<Homework> homeworks = homeworkRepository.findByStudentIdWithFiltersList(student.getId(), status, search);
+        List<HomeworkResponse> responses = homeworkMapper.toResponseList(homeworks);
+        populateAttachments(responses);
+        return responses;
+    }
+
+    @Transactional(readOnly = true)
+    public HomeworkStatsResponse getHomeworkStats() {
+        StudentProfile student = currentStudentProvider.getCurrentStudentProfile();
+        List<Object[]> counts = homeworkRepository.countByStatusForStudent(student.getId());
+        return buildStatsResponse(counts);
     }
 
     @Transactional(readOnly = true)
@@ -123,7 +154,9 @@ public class StudentSelfService {
 
         Homework updated = homeworkRepository.save(homework);
         HomeworkResponse response = homeworkMapper.toResponse(updated);
-        response.setAttachments(attachmentMapper.toResponseList(attachmentRepository.findByHomeworkId(updated.getId())));
+        List<AttachmentResponse> attachments = attachmentMapper.toResponseList(attachmentRepository.findByHomeworkId(updated.getId()));
+        response.setAttachments(attachments);
+        response.setAttachmentsCount(attachments.size());
         return response;
     }
 
@@ -134,7 +167,38 @@ public class StudentSelfService {
         Map<Long, List<AttachmentResponse>> byHomework = allAttachments.stream()
                 .map(attachmentMapper::toResponse)
                 .collect(Collectors.groupingBy(AttachmentResponse::getHomeworkId));
-        responses.forEach(r -> r.setAttachments(byHomework.getOrDefault(r.getId(), Collections.emptyList())));
+        responses.forEach(r -> {
+            List<AttachmentResponse> atts = byHomework.getOrDefault(r.getId(), Collections.emptyList());
+            r.setAttachments(atts);
+            r.setAttachmentsCount(atts.size());
+        });
+    }
+
+    private HomeworkStatsResponse buildStatsResponse(List<Object[]> counts) {
+        long assigned = 0;
+        long submitted = 0;
+        long reviewed = 0;
+
+        if (counts != null) {
+            for (Object[] row : counts) {
+                HomeworkStatus status = (HomeworkStatus) row[0];
+                long count = ((Number) row[1]).longValue();
+                if (status == HomeworkStatus.ASSIGNED) {
+                    assigned = count;
+                } else if (status == HomeworkStatus.SUBMITTED) {
+                    submitted = count;
+                } else if (status == HomeworkStatus.REVIEWED) {
+                    reviewed = count;
+                }
+            }
+        }
+
+        return HomeworkStatsResponse.builder()
+                .totalCount(assigned + submitted + reviewed)
+                .assignedCount(assigned)
+                .submittedCount(submitted)
+                .reviewedCount(reviewed)
+                .build();
     }
 
     @Transactional

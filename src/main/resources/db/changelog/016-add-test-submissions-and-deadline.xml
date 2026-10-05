@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="016-1-add-test-deadline" author="akusher">
+        <addColumn tableName="tests">
+            <column name="deadline" type="TIMESTAMP WITH TIME ZONE"/>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="016-2-create-test-submissions" author="akusher">
+        <createTable tableName="test_submissions">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_test_submissions" nullable="false"/>
+            </column>
+            <column name="test_id" type="BIGINT">
+                <constraints nullable="false" foreignKeyName="fk_test_submissions_test" references="tests(id)" deleteCascade="true"/>
+            </column>
+            <column name="student_id" type="BIGINT">
+                <constraints nullable="false" foreignKeyName="fk_test_submissions_student" references="student_profiles(id)" deleteCascade="true"/>
+            </column>
+            <column name="score" type="INTEGER">
+                <constraints nullable="false"/>
+            </column>
+            <column name="total_questions" type="INTEGER">
+                <constraints nullable="false"/>
+            </column>
+            <column name="percentage" type="INTEGER">
+                <constraints nullable="false"/>
+            </column>
+            <column name="time_spent_seconds" type="INTEGER"/>
+            <column name="answers_json" type="TEXT"/>
+            <column name="submitted_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex tableName="test_submissions" indexName="idx_test_submissions_test_id">
+            <column name="test_id"/>
+        </createIndex>
+
+        <createIndex tableName="test_submissions" indexName="idx_test_submissions_student_id">
+            <column name="student_id"/>
+        </createIndex>
+
+        <createIndex tableName="test_submissions" indexName="idx_test_submissions_test_student">
+            <column name="test_id"/>
+            <column name="student_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

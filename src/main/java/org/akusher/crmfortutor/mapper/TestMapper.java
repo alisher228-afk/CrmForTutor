@@ -15,18 +15,25 @@ import java.util.List;
 public interface TestMapper {
 
     @Mapping(target = "tutorId", source = "tutor.id")
+    @Mapping(target = "studentId", source = "student.id")
+    @Mapping(target = "studentName", expression = "java(entity.getStudent() != null ? (entity.getStudent().getFirstName() + (entity.getStudent().getLastName() != null && !entity.getStudent().getLastName().isBlank() ? \" \" + entity.getStudent().getLastName() : \"\")) : null)")
+    @Mapping(target = "submissionsCount", ignore = true)
+    @Mapping(target = "averageScore", ignore = true)
+    @Mapping(target = "mySubmission", ignore = true)
     TestResponse toResponse(TestEntity entity);
 
     List<TestResponse> toResponseList(List<TestEntity> entities);
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "tutor", ignore = true)
+    @Mapping(target = "student", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     TestEntity toEntity(TestCreateRequest request);
 
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "tutor", ignore = true)
+    @Mapping(target = "student", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     void updateEntityFromDto(TestUpdateRequest request, @MappingTarget TestEntity entity);

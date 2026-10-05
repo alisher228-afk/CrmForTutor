@@ -17,8 +17,14 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.akusher.crmfortutor.dto.request.HomeworkStatusUpdateRequest;
+import org.akusher.crmfortutor.dto.response.HomeworkStatsResponse;
 import org.akusher.crmfortutor.exception.BadRequestException;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
 import org.springframework.http.MediaType;
+
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -42,6 +48,7 @@ class HomeworkControllerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(homeworkController)
+                .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -117,5 +124,69 @@ class HomeworkControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").value("Tutor can only change homework status to REVIEWED"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/homework/student/{studentId} - 200 OK (unpaged list by default)")
+    void getHomeworkByStudent_Unpaged_Success() throws Exception {
+        HomeworkResponse response = HomeworkResponse.builder()
+                .id(1L)
+                .lessonId(10L)
+                .studentId(2L)
+                .title("Math Homework")
+                .status(HomeworkStatus.ASSIGNED)
+                .attachmentsCount(1)
+                .build();
+
+        when(homeworkService.getHomeworkListByStudent(eq(2L), any(), any()))
+                .thenReturn(List.of(response));
+
+        mockMvc.perform(get("/api/v1/homework/student/2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(1))
+                .andExpect(jsonPath("$[0].title").value("Math Homework"))
+                .andExpect(jsonPath("$[0].attachmentsCount").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/homework/student/{studentId} - 200 OK (paginated when page param present)")
+    void getHomeworkByStudent_Paginated_Success() throws Exception {
+        HomeworkResponse response = HomeworkResponse.builder()
+                .id(1L)
+                .lessonId(10L)
+                .studentId(2L)
+                .title("Math Homework")
+                .status(HomeworkStatus.ASSIGNED)
+                .attachmentsCount(1)
+                .build();
+
+        when(homeworkService.getHomeworkByStudent(eq(2L), any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(response), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/homework/student/2").param("page", "0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(1))
+                .andExpect(jsonPath("$.content[0].title").value("Math Homework"))
+                .andExpect(jsonPath("$.content[0].attachmentsCount").value(1));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/homework/student/{studentId}/stats - 200 OK")
+    void getHomeworkStatsByStudent_Success() throws Exception {
+        HomeworkStatsResponse stats = HomeworkStatsResponse.builder()
+                .totalCount(15)
+                .assignedCount(5)
+                .submittedCount(3)
+                .reviewedCount(7)
+                .build();
+
+        when(homeworkService.getHomeworkStatsByStudent(2L)).thenReturn(stats);
+
+        mockMvc.perform(get("/api/v1/homework/student/2/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCount").value(15))
+                .andExpect(jsonPath("$.assignedCount").value(5))
+                .andExpect(jsonPath("$.submittedCount").value(3))
+                .andExpect(jsonPath("$.reviewedCount").value(7));
     }
 }

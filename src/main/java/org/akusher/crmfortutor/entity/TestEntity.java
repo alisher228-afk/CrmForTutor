@@ -60,6 +60,21 @@ public class TestEntity {
     @Column(name = "time_limit_minutes")
     private Integer timeLimitMinutes;
 
+    @Column(name = "deadline")
+    private Instant deadline;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "target_type", length = 32, nullable = false)
+    @Builder.Default
+    private TestTargetType targetType = TestTargetType.ALL;
+
+    @Column(name = "group_name", length = 100)
+    private String groupName;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "student_id")
+    private StudentProfile student;
+
     @Column(name = "created_at", nullable = false)
     @Builder.Default
     private Instant createdAt = Instant.now();

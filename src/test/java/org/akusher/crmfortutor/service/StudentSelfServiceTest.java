@@ -37,11 +37,18 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import org.akusher.crmfortutor.dto.response.HomeworkStatsResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -165,6 +172,68 @@ class StudentSelfServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getTitle()).isEqualTo("Lab Work #1");
         verify(homeworkRepository).findByStudentId(10L);
+    }
+
+    @Test
+    @DisplayName("getHomework - paginated with status and search")
+    void getHomework_Paginated_Success() {
+        when(currentStudentProvider.getCurrentStudentProfile()).thenReturn(student);
+
+        Homework homework = Homework.builder().id(200L).title("Lab Work #1").status(HomeworkStatus.ASSIGNED).build();
+        Page<Homework> homeworkPage = new PageImpl<>(List.of(homework));
+        Pageable pageable = PageRequest.of(0, 20);
+
+        when(homeworkRepository.findByStudentIdWithFilters(eq(10L), eq(HomeworkStatus.ASSIGNED), eq("Lab"), eq(pageable)))
+                .thenReturn(homeworkPage);
+
+        HomeworkResponse homeworkResponse = HomeworkResponse.builder().id(200L).title("Lab Work #1").status(HomeworkStatus.ASSIGNED).build();
+        when(homeworkMapper.toResponse(homework)).thenReturn(homeworkResponse);
+
+        Page<HomeworkResponse> result = studentSelfService.getHomework(HomeworkStatus.ASSIGNED, "Lab", pageable);
+
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).getTitle()).isEqualTo("Lab Work #1");
+        verify(homeworkRepository).findByStudentIdWithFilters(eq(10L), eq(HomeworkStatus.ASSIGNED), eq("Lab"), eq(pageable));
+    }
+
+    @Test
+    @DisplayName("getHomeworkStats - returns aggregated statistics")
+    void getHomeworkStats_Success() {
+        when(currentStudentProvider.getCurrentStudentProfile()).thenReturn(student);
+
+        List<Object[]> counts = List.of(
+                new Object[]{HomeworkStatus.ASSIGNED, 3L},
+                new Object[]{HomeworkStatus.SUBMITTED, 2L},
+                new Object[]{HomeworkStatus.REVIEWED, 5L}
+        );
+        when(homeworkRepository.countByStatusForStudent(10L)).thenReturn(counts);
+
+        HomeworkStatsResponse stats = studentSelfService.getHomeworkStats();
+
+        assertThat(stats).isNotNull();
+        assertThat(stats.getTotalCount()).isEqualTo(10L);
+        assertThat(stats.getAssignedCount()).isEqualTo(3L);
+        assertThat(stats.getSubmittedCount()).isEqualTo(2L);
+        assertThat(stats.getReviewedCount()).isEqualTo(5L);
+    }
+
+    @Test
+    @DisplayName("getHomeworkList - returns unpaged list with filters")
+    void getHomeworkList_Success() {
+        when(currentStudentProvider.getCurrentStudentProfile()).thenReturn(student);
+
+        Homework homework = Homework.builder().id(200L).title("Lab Work #1").status(HomeworkStatus.ASSIGNED).build();
+        List<Homework> homeworkList = List.of(homework);
+        when(homeworkRepository.findByStudentIdWithFiltersList(10L, HomeworkStatus.ASSIGNED, "Lab")).thenReturn(homeworkList);
+
+        HomeworkResponse homeworkResponse = HomeworkResponse.builder().id(200L).title("Lab Work #1").status(HomeworkStatus.ASSIGNED).build();
+        when(homeworkMapper.toResponseList(homeworkList)).thenReturn(List.of(homeworkResponse));
+
+        List<HomeworkResponse> result = studentSelfService.getHomeworkList(HomeworkStatus.ASSIGNED, "Lab");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getTitle()).isEqualTo("Lab Work #1");
+        verify(homeworkRepository).findByStudentIdWithFiltersList(10L, HomeworkStatus.ASSIGNED, "Lab");
     }
 
     @Test

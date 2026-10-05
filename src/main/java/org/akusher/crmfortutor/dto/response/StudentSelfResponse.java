@@ -28,4 +28,8 @@ public class StudentSelfResponse {
     private String groupName;
     private StudentStatus status;
     private String tutorEmail;
+    private String tutorName;
+    private String tutorFirstName;
+    private String tutorLastName;
+    private String tutorPhone;
 }

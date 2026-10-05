@@ -27,4 +27,5 @@ public class HomeworkResponse {
     private HomeworkStatus status;
     private String studentNotes;
     private List<AttachmentResponse> attachments;
+    private Integer attachmentsCount;
 }

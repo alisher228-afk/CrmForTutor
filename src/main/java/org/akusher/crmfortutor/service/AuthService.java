@@ -84,6 +84,9 @@ public class AuthService {
                 .email(email)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(Role.ROLE_STUDENT)
+                .firstName(student.getFirstName())
+                .lastName(student.getLastName())
+                .phone(student.getPhone())
                 .createdAt(Instant.now())
                 .build();
 

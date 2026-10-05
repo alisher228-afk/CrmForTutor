@@ -37,8 +37,11 @@ public class TestController {
     public ResponseEntity<Page<TestResponse>> getTests(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) TestType type,
+            @RequestParam(required = false) org.akusher.crmfortutor.entity.TestTargetType targetType,
+            @RequestParam(required = false) String groupName,
+            @RequestParam(required = false) Long studentId,
             @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(testService.getTests(search, type, pageable));
+        return ResponseEntity.ok(testService.getTests(search, type, targetType, groupName, studentId, pageable));
     }
 
     @GetMapping("/all")
@@ -61,6 +64,11 @@ public class TestController {
             @PathVariable Long id,
             @Valid @RequestBody TestUpdateRequest request) {
         return ResponseEntity.ok(testService.updateTest(id, request));
+    }
+
+    @GetMapping("/{id}/submissions")
+    public ResponseEntity<List<org.akusher.crmfortutor.dto.response.TestSubmissionResponse>> getTestSubmissions(@PathVariable Long id) {
+        return ResponseEntity.ok(testService.getTestSubmissions(id));
     }
 
     @DeleteMapping("/{id}")

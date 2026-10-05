@@ -4,13 +4,19 @@ import lombok.RequiredArgsConstructor;
 import org.akusher.crmfortutor.dto.request.HomeworkSubmitRequest;
 import org.akusher.crmfortutor.dto.request.LessonCancelRequest;
 import org.akusher.crmfortutor.dto.response.HomeworkResponse;
+import org.akusher.crmfortutor.dto.response.HomeworkStatsResponse;
 import org.akusher.crmfortutor.dto.response.LessonResponse;
 import org.akusher.crmfortutor.dto.response.MaterialResponse;
 import org.akusher.crmfortutor.dto.response.StudentPaymentsResponse;
 import org.akusher.crmfortutor.dto.response.StudentSelfResponse;
+import org.akusher.crmfortutor.entity.HomeworkStatus;
 import org.akusher.crmfortutor.service.DownloadedAttachment;
 import org.akusher.crmfortutor.service.StudentSelfService;
 import org.springframework.core.io.Resource;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -20,6 +26,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -29,6 +36,12 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.akusher.crmfortutor.dto.request.TestSubmissionRequest;
+import org.akusher.crmfortutor.dto.response.TestResponse;
+import org.akusher.crmfortutor.dto.response.TestSubmissionResponse;
+import org.akusher.crmfortutor.entity.TestType;
+import org.akusher.crmfortutor.service.TestService;
+
 @RestController
 @RequestMapping("/api/v1/me")
 @PreAuthorize("hasRole('STUDENT')")
@@ -36,6 +49,7 @@ import java.util.List;
 public class StudentSelfController {
 
     private final StudentSelfService studentSelfService;
+    private final TestService testService;
 
     @GetMapping("/profile")
     public ResponseEntity<StudentSelfResponse> getProfile() {
@@ -50,8 +64,21 @@ public class StudentSelfController {
     }
 
     @GetMapping("/homework")
-    public ResponseEntity<List<HomeworkResponse>> getHomework() {
-        return ResponseEntity.ok(studentSelfService.getHomework());
+    public ResponseEntity<?> getHomework(
+            @RequestParam(required = false) HomeworkStatus status,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
+        if (page != null) {
+            return ResponseEntity.ok(studentSelfService.getHomework(status, search, pageable));
+        }
+        return ResponseEntity.ok(studentSelfService.getHomeworkList(status, search));
+    }
+
+    @GetMapping("/homework/stats")
+    public ResponseEntity<HomeworkStatsResponse> getHomeworkStats() {
+        return ResponseEntity.ok(studentSelfService.getHomeworkStats());
     }
 
     @GetMapping("/payments")
@@ -114,5 +141,24 @@ public class StudentSelfController {
         }
 
         return builder.body(downloaded.resource());
+    }
+
+    @GetMapping("/tests")
+    public ResponseEntity<List<TestResponse>> getTests(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) TestType type) {
+        return ResponseEntity.ok(testService.getTestsForCurrentStudent(search, type));
+    }
+
+    @GetMapping("/tests/{id}")
+    public ResponseEntity<TestResponse> getTestById(@PathVariable Long id) {
+        return ResponseEntity.ok(testService.getTestForCurrentStudent(id));
+    }
+
+    @PostMapping("/tests/{id}/submit")
+    public ResponseEntity<TestSubmissionResponse> submitTest(
+            @PathVariable Long id,
+            @RequestBody(required = false) TestSubmissionRequest request) {
+        return ResponseEntity.ok(testService.submitTestForCurrentStudent(id, request));
     }
 }

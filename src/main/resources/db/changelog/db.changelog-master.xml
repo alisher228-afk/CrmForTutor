@@ -19,6 +19,9 @@
     <include file="012-create-teaching-materials.xml" relativeToChangelogFile="true"/>
     <include file="013-create-tests.xml" relativeToChangelogFile="true"/>
     <include file="014-add-cancellation-reason.xml" relativeToChangelogFile="true"/>
+    <include file="015-add-user-profile-fields.xml" relativeToChangelogFile="true"/>
+    <include file="016-add-test-submissions-and-deadline.xml" relativeToChangelogFile="true"/>
+    <include file="017-add-test-assignment-fields.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>
 

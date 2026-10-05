@@ -4,8 +4,11 @@ import lombok.RequiredArgsConstructor;
 import org.akusher.crmfortutor.dto.request.HomeworkCreateRequest;
 import org.akusher.crmfortutor.dto.request.HomeworkStatusUpdateRequest;
 import org.akusher.crmfortutor.dto.response.HomeworkResponse;
+import org.akusher.crmfortutor.dto.response.HomeworkStatsResponse;
 import org.akusher.crmfortutor.entity.Homework;
 import org.akusher.crmfortutor.entity.HomeworkStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.akusher.crmfortutor.entity.Lesson;
 import org.akusher.crmfortutor.entity.LessonStatus;
 import org.akusher.crmfortutor.entity.StudentProfile;
@@ -124,6 +127,20 @@ public class HomeworkService {
     }
 
     @Transactional(readOnly = true)
+    public Page<HomeworkResponse> getHomeworkByStudent(Long studentId, HomeworkStatus status, String search, Pageable pageable) {
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+
+        // Verify student belongs to this tutor (404 if not)
+        studentProfileRepository.findByIdAndTutorId(studentId, tutorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + studentId));
+
+        Page<Homework> homeworks = homeworkRepository.findByStudentIdAndTutorIdWithFilters(studentId, tutorId, status, search, pageable);
+        Page<HomeworkResponse> responses = homeworks.map(homeworkMapper::toResponse);
+        populateAttachments(responses.getContent());
+        return responses;
+    }
+
+    @Transactional(readOnly = true)
     public List<HomeworkResponse> getHomeworkByStudent(Long studentId) {
         Long tutorId = currentUserProvider.getCurrentTutorId();
 
@@ -135,6 +152,35 @@ public class HomeworkService {
         List<HomeworkResponse> responses = homeworkMapper.toResponseList(homeworks);
         populateAttachments(responses);
         return responses;
+    }
+
+    @Transactional(readOnly = true)
+    public List<HomeworkResponse> getHomeworkListByStudent(Long studentId, HomeworkStatus status, String search) {
+        if (status == null && (search == null || search.isBlank())) {
+            return getHomeworkByStudent(studentId);
+        }
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+
+        // Verify student belongs to this tutor (404 if not)
+        studentProfileRepository.findByIdAndTutorId(studentId, tutorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + studentId));
+
+        List<Homework> homeworks = homeworkRepository.findByStudentIdAndTutorIdWithFiltersList(studentId, tutorId, status, search);
+        List<HomeworkResponse> responses = homeworkMapper.toResponseList(homeworks);
+        populateAttachments(responses);
+        return responses;
+    }
+
+    @Transactional(readOnly = true)
+    public HomeworkStatsResponse getHomeworkStatsByStudent(Long studentId) {
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+
+        // Verify student belongs to this tutor (404 if not)
+        studentProfileRepository.findByIdAndTutorId(studentId, tutorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + studentId));
+
+        List<Object[]> counts = homeworkRepository.countByStatusForStudentAndTutor(studentId, tutorId);
+        return buildStatsResponse(counts);
     }
 
     @Transactional(readOnly = true)
@@ -157,7 +203,9 @@ public class HomeworkService {
                 .orElseThrow(() -> new ResourceNotFoundException("Homework not found with id: " + id));
 
         HomeworkResponse response = homeworkMapper.toResponse(homework);
-        response.setAttachments(attachmentMapper.toResponseList(attachmentRepository.findByHomeworkId(homework.getId())));
+        List<AttachmentResponse> attachments = attachmentMapper.toResponseList(attachmentRepository.findByHomeworkId(homework.getId()));
+        response.setAttachments(attachments);
+        response.setAttachmentsCount(attachments.size());
         return response;
     }
 
@@ -189,7 +237,9 @@ public class HomeworkService {
 
         Homework updated = homeworkRepository.save(homework);
         HomeworkResponse response = homeworkMapper.toResponse(updated);
-        response.setAttachments(attachmentMapper.toResponseList(attachmentRepository.findByHomeworkId(updated.getId())));
+        List<AttachmentResponse> attachments = attachmentMapper.toResponseList(attachmentRepository.findByHomeworkId(updated.getId()));
+        response.setAttachments(attachments);
+        response.setAttachmentsCount(attachments.size());
         return response;
     }
 
@@ -226,6 +276,37 @@ public class HomeworkService {
         Map<Long, List<AttachmentResponse>> byHomework = allAttachments.stream()
                 .map(attachmentMapper::toResponse)
                 .collect(Collectors.groupingBy(AttachmentResponse::getHomeworkId));
-        responses.forEach(r -> r.setAttachments(byHomework.getOrDefault(r.getId(), Collections.emptyList())));
+        responses.forEach(r -> {
+            List<AttachmentResponse> atts = byHomework.getOrDefault(r.getId(), Collections.emptyList());
+            r.setAttachments(atts);
+            r.setAttachmentsCount(atts.size());
+        });
+    }
+
+    private HomeworkStatsResponse buildStatsResponse(List<Object[]> counts) {
+        long assigned = 0;
+        long submitted = 0;
+        long reviewed = 0;
+
+        if (counts != null) {
+            for (Object[] row : counts) {
+                HomeworkStatus status = (HomeworkStatus) row[0];
+                long count = ((Number) row[1]).longValue();
+                if (status == HomeworkStatus.ASSIGNED) {
+                    assigned = count;
+                } else if (status == HomeworkStatus.SUBMITTED) {
+                    submitted = count;
+                } else if (status == HomeworkStatus.REVIEWED) {
+                    reviewed = count;
+                }
+            }
+        }
+
+        return HomeworkStatsResponse.builder()
+                .totalCount(assigned + submitted + reviewed)
+                .assignedCount(assigned)
+                .submittedCount(submitted)
+                .reviewedCount(reviewed)
+                .build();
     }
 }

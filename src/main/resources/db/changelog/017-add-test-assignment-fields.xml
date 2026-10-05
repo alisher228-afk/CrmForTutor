@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <changeSet id="017-1-add-test-assignment-columns" author="akusher">
+        <addColumn tableName="tests">
+            <column name="target_type" type="VARCHAR(32)" defaultValue="ALL">
+                <constraints nullable="false"/>
+            </column>
+            <column name="group_name" type="VARCHAR(100)"/>
+            <column name="student_id" type="BIGINT"/>
+        </addColumn>
+
+        <addForeignKeyConstraint baseTableName="tests"
+                                 baseColumnNames="student_id"
+                                 constraintName="fk_tests_student"
+                                 referencedTableName="student_profiles"
+                                 referencedColumnNames="id"
+                                 onDelete="SET NULL"/>
+
+        <createIndex tableName="tests" indexName="idx_tests_target_type">
+            <column name="target_type"/>
+        </createIndex>
+
+        <createIndex tableName="tests" indexName="idx_tests_group_name">
+            <column name="group_name"/>
+        </createIndex>
+
+        <createIndex tableName="tests" indexName="idx_tests_student_id">
+            <column name="student_id"/>
+        </createIndex>
+    </changeSet>
+
+</databaseChangeLog>

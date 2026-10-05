@@ -16,4 +16,14 @@ class CrmForTutorApplicationTests {
         lessonRepository.findByStudentIdAndFilters(1L, null, null);
         lessonRepository.findByStudentIdAndFilters(1L, java.time.LocalDateTime.now(), java.time.LocalDateTime.now().plusDays(7));
     }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.akusher.crmfortutor.repository.TestRepository testRepository;
+
+    @Test
+    void testFindTestsForStudent() {
+        testRepository.findTestsForStudent(1L, 1L, null, null, null);
+        testRepository.findTestsForStudent(1L, 1L, "", null, null);
+        testRepository.findTestsForStudent(1L, 1L, "Group A", "search", null);
+    }
 }

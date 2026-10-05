@@ -8,6 +8,7 @@ import org.akusher.crmfortutor.entity.Role;
 import org.akusher.crmfortutor.exception.BadRequestException;
 import org.akusher.crmfortutor.exception.GlobalExceptionHandler;
 import org.akusher.crmfortutor.service.AuthService;
+import org.akusher.crmfortutor.service.ProfileService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,9 @@ class AuthControllerTest {
 
     @Mock
     private AuthService authService;
+
+    @Mock
+    private ProfileService profileService;
 
     @InjectMocks
     private AuthController authController;
@@ -127,5 +131,20 @@ class AuthControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("ROLE_STUDENT"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/change-password - 200 OK")
+    void changePassword_Success() throws Exception {
+        org.akusher.crmfortutor.dto.request.ChangePasswordRequest request = org.akusher.crmfortutor.dto.request.ChangePasswordRequest.builder()
+                .currentPassword("oldPass123")
+                .newPassword("newPass456")
+                .build();
+
+        mockMvc.perform(post("/api/v1/auth/change-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Пароль успешно изменен"));
     }
 }

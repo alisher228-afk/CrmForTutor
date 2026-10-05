@@ -19,7 +19,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.akusher.crmfortutor.dto.request.HomeworkSubmitRequest;
+import org.akusher.crmfortutor.dto.response.HomeworkStatsResponse;
 import org.akusher.crmfortutor.exception.BadRequestException;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.web.PageableHandlerMethodArgumentResolver;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -50,6 +54,7 @@ class StudentSelfControllerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(studentSelfController)
+                .setCustomArgumentResolvers(new PageableHandlerMethodArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -97,20 +102,59 @@ class StudentSelfControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/v1/me/homework - 200 OK")
-    void getHomework_Success() throws Exception {
+    @DisplayName("GET /api/v1/me/homework - 200 OK (unpaged list by default)")
+    void getHomework_Unpaged_Success() throws Exception {
         HomeworkResponse homework = HomeworkResponse.builder()
                 .id(5L)
                 .title("Essay")
                 .status(HomeworkStatus.ASSIGNED)
                 .build();
 
-        when(studentSelfService.getHomework()).thenReturn(List.of(homework));
+        when(studentSelfService.getHomeworkList(any(), any()))
+                .thenReturn(List.of(homework));
 
         mockMvc.perform(get("/api/v1/me/homework"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(5))
                 .andExpect(jsonPath("$[0].title").value("Essay"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/me/homework - 200 OK (paginated when page param present)")
+    void getHomework_Paginated_Success() throws Exception {
+        HomeworkResponse homework = HomeworkResponse.builder()
+                .id(5L)
+                .title("Essay")
+                .status(HomeworkStatus.ASSIGNED)
+                .build();
+
+        when(studentSelfService.getHomework(any(), any(), any()))
+                .thenReturn(new PageImpl<>(List.of(homework), PageRequest.of(0, 20), 1));
+
+        mockMvc.perform(get("/api/v1/me/homework").param("page", "0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].id").value(5))
+                .andExpect(jsonPath("$.content[0].title").value("Essay"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/me/homework/stats - 200 OK")
+    void getHomeworkStats_Success() throws Exception {
+        HomeworkStatsResponse stats = HomeworkStatsResponse.builder()
+                .totalCount(10)
+                .assignedCount(3)
+                .submittedCount(2)
+                .reviewedCount(5)
+                .build();
+
+        when(studentSelfService.getHomeworkStats()).thenReturn(stats);
+
+        mockMvc.perform(get("/api/v1/me/homework/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCount").value(10))
+                .andExpect(jsonPath("$.assignedCount").value(3))
+                .andExpect(jsonPath("$.submittedCount").value(2))
+                .andExpect(jsonPath("$.reviewedCount").value(5));
     }
 
     @Test

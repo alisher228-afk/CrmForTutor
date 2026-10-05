@@ -27,4 +27,12 @@ public class TestUpdateRequest {
     private String questionsJson;
 
     private Integer timeLimitMinutes;
+
+    private java.time.Instant deadline;
+
+    private org.akusher.crmfortutor.entity.TestTargetType targetType;
+
+    private String groupName;
+
+    private Long studentId;
 }

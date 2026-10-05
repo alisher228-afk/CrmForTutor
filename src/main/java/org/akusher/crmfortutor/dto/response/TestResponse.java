@@ -25,6 +25,14 @@ public class TestResponse {
     private String externalUrl;
     private String questionsJson;
     private Integer timeLimitMinutes;
+    private Instant deadline;
+    private org.akusher.crmfortutor.entity.TestTargetType targetType;
+    private String groupName;
+    private Long studentId;
+    private String studentName;
+    private Long submissionsCount;
+    private Double averageScore;
+    private TestSubmissionResponse mySubmission;
     private Instant createdAt;
     private Instant updatedAt;
 }
