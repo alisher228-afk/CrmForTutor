@@ -161,4 +161,9 @@ public class StudentSelfController {
             @RequestBody(required = false) TestSubmissionRequest request) {
         return ResponseEntity.ok(testService.submitTestForCurrentStudent(id, request));
     }
+
+    @PostMapping("/telegram-code")
+    public ResponseEntity<org.akusher.crmfortutor.dto.response.TelegramLinkCodeResponse> generateTelegramLinkCode() {
+        return ResponseEntity.ok(studentSelfService.generateTelegramLinkCode());
+    }
 }

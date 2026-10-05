@@ -28,4 +28,5 @@ public class StudentResponse {
     private String groupName;
     private String notes;
     private StudentStatus status;
+    private Boolean telegramLinked;
 }

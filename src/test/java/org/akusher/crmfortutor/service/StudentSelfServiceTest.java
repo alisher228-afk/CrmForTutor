@@ -75,6 +75,10 @@ class StudentSelfServiceTest {
     private AttachmentRepository attachmentRepository;
     @Mock
     private AttachmentMapper attachmentMapper;
+    @Mock
+    private org.akusher.crmfortutor.repository.StudentProfileRepository studentProfileRepository;
+    @Mock
+    private org.akusher.crmfortutor.config.TelegramProperties telegramProperties;
 
     @InjectMocks
     private StudentSelfService studentSelfService;

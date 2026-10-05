@@ -173,7 +173,7 @@ public class StudentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + id));
 
         String code = generateUniqueTelegramLinkCode();
-        Instant expiresAt = Instant.now().plus(15, ChronoUnit.MINUTES);
+        Instant expiresAt = Instant.now().plus(24, ChronoUnit.HOURS);
 
         student.setTelegramLinkCode(code);
         student.setTelegramLinkCodeExpiresAt(expiresAt);

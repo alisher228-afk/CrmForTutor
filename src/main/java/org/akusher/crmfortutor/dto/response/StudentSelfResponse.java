@@ -32,4 +32,5 @@ public class StudentSelfResponse {
     private String tutorFirstName;
     private String tutorLastName;
     private String tutorPhone;
+    private Boolean telegramLinked;
 }

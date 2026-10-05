@@ -38,10 +38,19 @@ import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.akusher.crmfortutor.config.TelegramProperties;
+import org.akusher.crmfortutor.dto.response.TelegramLinkCodeResponse;
+import org.akusher.crmfortutor.repository.StudentProfileRepository;
+
+import java.security.SecureRandom;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Random;
 import java.util.stream.Collectors;
 
 @Service
@@ -49,6 +58,8 @@ import java.util.stream.Collectors;
 public class StudentSelfService {
 
     private final CurrentStudentProvider currentStudentProvider;
+    private final StudentProfileRepository studentProfileRepository;
+    private final TelegramProperties telegramProperties;
     private final LessonRepository lessonRepository;
     private final HomeworkRepository homeworkRepository;
     private final PaymentRepository paymentRepository;
@@ -268,5 +279,36 @@ public class StudentSelfService {
                 material.getContentType(),
                 material.getSizeBytes()
         );
+    }
+
+    @Transactional
+    public TelegramLinkCodeResponse generateTelegramLinkCode() {
+        StudentProfile student = currentStudentProvider.getCurrentStudentProfile();
+        String code = generateUniqueTelegramLinkCode();
+        Instant expiresAt = Instant.now().plus(24, ChronoUnit.HOURS);
+
+        student.setTelegramLinkCode(code);
+        student.setTelegramLinkCodeExpiresAt(expiresAt);
+        studentProfileRepository.save(student);
+
+        return TelegramLinkCodeResponse.builder()
+                .studentId(student.getId())
+                .linkCode(code)
+                .expiresAt(expiresAt)
+                .botUsername(telegramProperties != null ? telegramProperties.getBotUsername() : null)
+                .build();
+    }
+
+    private String generateUniqueTelegramLinkCode() {
+        Random random = new SecureRandom();
+        for (int i = 0; i < 100; i++) {
+            String code = String.format("%06d", random.nextInt(1_000_000));
+            Optional<StudentProfile> existing = studentProfileRepository.findByTelegramLinkCode(code);
+            if (existing.isEmpty() || existing.get().getTelegramLinkCodeExpiresAt() == null
+                    || existing.get().getTelegramLinkCodeExpiresAt().isBefore(Instant.now())) {
+                return code;
+            }
+        }
+        throw new IllegalStateException("Failed to generate a unique telegram link code");
     }
 }

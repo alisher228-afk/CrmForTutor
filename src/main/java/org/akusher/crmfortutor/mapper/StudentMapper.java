@@ -16,6 +16,7 @@ public interface StudentMapper {
 
     @Mapping(target = "userId", source = "user.id")
     @Mapping(target = "tutorId", source = "tutor.id")
+    @Mapping(target = "telegramLinked", expression = "java(entity.getTelegramChatId() != null)")
     StudentResponse toResponse(StudentProfile entity);
 
     @Mapping(target = "userId", source = "user.id")
@@ -25,6 +26,7 @@ public interface StudentMapper {
     @Mapping(target = "tutorLastName", source = "tutor.lastName")
     @Mapping(target = "tutorPhone", source = "tutor.phone")
     @Mapping(target = "tutorName", expression = "java(resolveTutorName(entity.getTutor()))")
+    @Mapping(target = "telegramLinked", expression = "java(entity.getTelegramChatId() != null)")
     StudentSelfResponse toSelfResponse(StudentProfile entity);
 
     default String resolveTutorName(User tutor) {
