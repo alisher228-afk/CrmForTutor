@@ -55,4 +55,9 @@ public class AuthController {
         profileService.changePassword(request);
         return ResponseEntity.ok(Map.of("message", "Пароль успешно изменен"));
     }
+
+    @PostMapping("/telegram-webapp")
+    public ResponseEntity<AuthResponse> loginWithTelegramWebApp(@Valid @RequestBody org.akusher.crmfortutor.dto.request.TelegramWebAppAuthRequest request) {
+        return ResponseEntity.ok(authService.loginWithTelegramWebApp(request));
+    }
 }

@@ -22,7 +22,14 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.akusher.crmfortutor.dto.request.TelegramWebAppAuthRequest;
+import org.akusher.crmfortutor.dto.telegram.TelegramWebAppData;
+import org.akusher.crmfortutor.security.TelegramWebAppValidator;
+import org.springframework.util.StringUtils;
+
 import java.time.Instant;
+import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -33,6 +40,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final AuthenticationManager authenticationManager;
+    private final TelegramWebAppValidator telegramWebAppValidator;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -150,6 +158,72 @@ public class AuthService {
         return AuthResponse.builder()
                 .accessToken(newAccessToken)
                 .refreshToken(newRefreshToken)
+                .tokenType("Bearer")
+                .role(user.getRole())
+                .build();
+    }
+
+    @Transactional
+    public AuthResponse loginWithTelegramWebApp(TelegramWebAppAuthRequest request) {
+        TelegramWebAppData webAppData = telegramWebAppValidator.validate(request.getInitData());
+        Long telegramId = webAppData.getUser().getId();
+
+        // 1. Check if linkCode was provided in request or startParam
+        String linkCode = StringUtils.hasText(request.getLinkCode())
+                ? request.getLinkCode().trim()
+                : webAppData.getStartParam();
+
+        if (StringUtils.hasText(linkCode)) {
+            Optional<StudentProfile> byCodeOpt = studentProfileRepository.findByTelegramLinkCode(linkCode);
+            if (byCodeOpt.isPresent()) {
+                StudentProfile student = byCodeOpt.get();
+                if (student.getTelegramLinkCodeExpiresAt() != null &&
+                        student.getTelegramLinkCodeExpiresAt().isBefore(Instant.now())) {
+                    throw new BadRequestException("Срок действия кода привязки истёк");
+                }
+                student.setTelegramChatId(telegramId);
+                student.setTelegramLinkCode(null);
+                student.setTelegramLinkCodeExpiresAt(null);
+                studentProfileRepository.save(student);
+            } else {
+                if (studentProfileRepository.findByTelegramChatId(telegramId).isEmpty()) {
+                    throw new BadRequestException("Неверный код привязки ученика");
+                }
+            }
+        }
+
+        // 2. Find student by telegramChatId
+        StudentProfile student = studentProfileRepository.findByTelegramChatId(telegramId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Telegram аккаунт не привязан к профилю ученика. Пожалуйста, введите код привязки от репетитора."));
+
+        // 3. Ensure User exists for this student
+        User user = student.getUser();
+        if (user == null) {
+            String email = "tg_" + telegramId + "@studly.local";
+            user = userRepository.findByEmail(email).orElseGet(() -> {
+                User newUser = User.builder()
+                        .email(email)
+                        .password(passwordEncoder.encode(UUID.randomUUID().toString()))
+                        .role(Role.ROLE_STUDENT)
+                        .firstName(student.getFirstName())
+                        .lastName(student.getLastName())
+                        .phone(student.getPhone())
+                        .createdAt(Instant.now())
+                        .build();
+                return userRepository.save(newUser);
+            });
+            student.setUser(user);
+            studentProfileRepository.save(student);
+        }
+
+        // 4. Generate JWT tokens
+        String accessToken = tokenProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole());
+        String refreshToken = tokenProvider.generateRefreshToken(user.getEmail());
+
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
                 .tokenType("Bearer")
                 .role(user.getRole())
                 .build();

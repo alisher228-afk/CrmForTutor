@@ -50,6 +50,8 @@ class AuthServiceTest {
     private JwtTokenProvider tokenProvider;
     @Mock
     private AuthenticationManager authenticationManager;
+    @Mock
+    private org.akusher.crmfortutor.security.TelegramWebAppValidator telegramWebAppValidator;
 
     @InjectMocks
     private AuthService authService;
@@ -289,5 +291,92 @@ class AuthServiceTest {
 
         verify(tokenProvider, never()).getTokenType(any());
         verify(userRepository, never()).findByEmail(any());
+    }
+
+    @Test
+    @DisplayName("loginWithTelegramWebApp - success when student already has user")
+    void loginWithTelegramWebApp_Success_ExistingUser() {
+        var req = org.akusher.crmfortutor.dto.request.TelegramWebAppAuthRequest.builder()
+                .initData("mockInitData")
+                .build();
+
+        var tgUser = org.akusher.crmfortutor.dto.telegram.TelegramWebAppUser.builder()
+                .id(123456L)
+                .firstName("Alex")
+                .build();
+        var tgData = org.akusher.crmfortutor.dto.telegram.TelegramWebAppData.builder()
+                .user(tgUser)
+                .build();
+
+        User user = User.builder().id(10L).email("student@example.com").role(Role.ROLE_STUDENT).build();
+        StudentProfile profile = StudentProfile.builder().id(1L).user(user).telegramChatId(123456L).build();
+
+        when(telegramWebAppValidator.validate("mockInitData")).thenReturn(tgData);
+        when(studentProfileRepository.findByTelegramChatId(123456L)).thenReturn(Optional.of(profile));
+        when(tokenProvider.generateAccessToken(10L, "student@example.com", Role.ROLE_STUDENT)).thenReturn("tg-access-token");
+        when(tokenProvider.generateRefreshToken("student@example.com")).thenReturn("tg-refresh-token");
+
+        AuthResponse response = authService.loginWithTelegramWebApp(req);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getAccessToken()).isEqualTo("tg-access-token");
+        assertThat(response.getRole()).isEqualTo(Role.ROLE_STUDENT);
+    }
+
+    @Test
+    @DisplayName("loginWithTelegramWebApp - success auto-creates user if student user is null")
+    void loginWithTelegramWebApp_Success_AutoCreatesUser() {
+        var req = org.akusher.crmfortutor.dto.request.TelegramWebAppAuthRequest.builder()
+                .initData("mockInitData")
+                .build();
+
+        var tgUser = org.akusher.crmfortutor.dto.telegram.TelegramWebAppUser.builder()
+                .id(789L)
+                .firstName("Ivan")
+                .build();
+        var tgData = org.akusher.crmfortutor.dto.telegram.TelegramWebAppData.builder()
+                .user(tgUser)
+                .build();
+
+        StudentProfile profile = StudentProfile.builder().id(2L).firstName("Ivan").telegramChatId(789L).build();
+        User createdUser = User.builder().id(20L).email("tg_789@studly.local").role(Role.ROLE_STUDENT).build();
+
+        when(telegramWebAppValidator.validate("mockInitData")).thenReturn(tgData);
+        when(studentProfileRepository.findByTelegramChatId(789L)).thenReturn(Optional.of(profile));
+        when(userRepository.findByEmail("tg_789@studly.local")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(any())).thenReturn("hashed-pwd");
+        when(userRepository.save(any(User.class))).thenReturn(createdUser);
+        when(studentProfileRepository.save(any(StudentProfile.class))).thenReturn(profile);
+        when(tokenProvider.generateAccessToken(20L, "tg_789@studly.local", Role.ROLE_STUDENT)).thenReturn("new-tg-token");
+        when(tokenProvider.generateRefreshToken("tg_789@studly.local")).thenReturn("new-tg-refresh");
+
+        AuthResponse response = authService.loginWithTelegramWebApp(req);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getAccessToken()).isEqualTo("new-tg-token");
+        assertThat(response.getRole()).isEqualTo(Role.ROLE_STUDENT);
+    }
+
+    @Test
+    @DisplayName("loginWithTelegramWebApp - throws ResourceNotFoundException when telegram is not linked")
+    void loginWithTelegramWebApp_NotLinked_ThrowsException() {
+        var req = org.akusher.crmfortutor.dto.request.TelegramWebAppAuthRequest.builder()
+                .initData("mockInitData")
+                .build();
+
+        var tgUser = org.akusher.crmfortutor.dto.telegram.TelegramWebAppUser.builder()
+                .id(999L)
+                .firstName("Unknown")
+                .build();
+        var tgData = org.akusher.crmfortutor.dto.telegram.TelegramWebAppData.builder()
+                .user(tgUser)
+                .build();
+
+        when(telegramWebAppValidator.validate("mockInitData")).thenReturn(tgData);
+        when(studentProfileRepository.findByTelegramChatId(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.loginWithTelegramWebApp(req))
+                .isInstanceOf(org.akusher.crmfortutor.exception.ResourceNotFoundException.class)
+                .hasMessageContaining("Telegram аккаунт не привязан");
     }
 }

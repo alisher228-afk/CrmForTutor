@@ -23,6 +23,8 @@ public interface StudentProfileRepository extends JpaRepository<StudentProfile, 
  
     Optional<StudentProfile> findByTelegramLinkCode(String telegramLinkCode);
 
+    Optional<StudentProfile> findByTelegramChatId(Long telegramChatId);
+
     @Query("""
         SELECT s FROM StudentProfile s
         WHERE s.tutor.id = :tutorId
