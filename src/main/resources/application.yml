@@ -34,7 +34,7 @@ storage:
 
 jwt:
   secret: ${JWT_SECRET}
-  access-expiration: ${JWT_ACCESS_EXPIRATION:900000} # 15 minutes (in ms)
+  access-expiration: ${JWT_ACCESS_EXPIRATION:7200000} # 2 hours (in ms)
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000} # 7 days (in ms)
 
 server:

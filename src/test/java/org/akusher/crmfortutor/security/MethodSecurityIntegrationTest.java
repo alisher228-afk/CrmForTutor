@@ -108,4 +108,11 @@ class MethodSecurityIntegrationTest {
                         .content("{}"))
                 .andExpect(status().isOk());
     }
+
+    @Test
+    @DisplayName("Unauthenticated user accessing protected endpoint returns 401 Unauthorized")
+    void anonymousCannotAccessProtectedEndpointWithoutAuth() throws Exception {
+        mockMvc.perform(get("/api/v1/students"))
+                .andExpect(status().isUnauthorized());
+    }
 }
