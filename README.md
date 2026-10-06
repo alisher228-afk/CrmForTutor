@@ -1,14 +1,20 @@
-# 🎓 CRM for Tutor (CrmForTutor)
+# 🎓 CRM for Tutor (Studly CRM Backend)
 
 [![Java 21](https://img.shields.io/badge/Java-21-orange?logo=openjdk)](https://openjdk.org/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.1-brightgreen?logo=springboot)](https://spring.io/projects/spring-boot)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen?logo=springboot)](https://spring.io/projects/spring-boot)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-blue?logo=postgresql)](https://www.postgresql.org/)
 [![Liquibase](https://img.shields.io/badge/Liquibase-Database%20Migrations-red?logo=liquibase)](https://www.liquibase.org/)
 [![JWT](https://img.shields.io/badge/Auth-JWT%20(JJWT)-yellow?logo=jsonwebtokens)](https://jwt.io/)
 [![OpenAPI](https://img.shields.io/badge/Documentation-Swagger%20OpenAPI-green?logo=swagger)](https://swagger.io/)
-[![Tests](https://img.shields.io/badge/Tests-153%20passed-success?logo=junit5)](https://junit.org/junit5/)
+[![Tests](https://img.shields.io/badge/Tests-218%20passed-success?logo=junit5)](https://junit.org/junit5/)
 
-**CRM for Tutor** — специализированная серверная платформа для автоматизации работы частных преподавателей, репетиторов и онлайн-школ. Система предоставляет раздельные рабочие пространства для репетитора и ученика: управление расписанием, балансом уроков, взаиморасчетами, домашними заданиями и файловыми вложениями с контролем доступа и строгой изоляцией данных.
+> **🌐 Текущий деплой (Staging / Beta):**
+> - **Веб-приложение:** [https://studly-crm.vercel.app](https://studly-crm.vercel.app/)
+> - **API Бэкенда:** [https://crmfortutor.onrender.com](https://crmfortutor.onrender.com)
+> - **Telegram Бот & Mini App:** [@studly_tutor_bot](https://t.me/studly_tutor_bot)
+> - **Swagger UI:** [https://crmfortutor.onrender.com/swagger-ui.html](https://crmfortutor.onrender.com/swagger-ui.html)
+
+**CRM for Tutor (Studly CRM)** — специализированная серверная платформа для автоматизации работы частных преподавателей, репетиторов и онлайн-школ. Система предоставляет раздельные рабочие пространства для репетитора и ученика: управление расписанием (индивидуальные и групповые занятия), балансом уроков, взаиморасчетами, домашними заданиями, файловыми вложениями, мгновенными Telegram-уведомлениями и нативной авторизацией через Telegram Mini App.
 
 ---
 
@@ -32,15 +38,17 @@
 ## ✨ Ключевые возможности
 
 - 👩‍🏫 **Кабинет репетитора (`ROLE_TUTOR`)**:
-  - Карточки учеников, ставки за час, история контактов и приватные заметки.
+  - Карточки учеников, ставки за час, история контактов, приватные заметки и распределение по **учебным группам**.
   - Генерация безопасных одноразовых инвайт-токенов для приглашения учеников.
-  - Календарное планирование уроков с интервальной фильтрацией, темами и ссылками на видеозвонки.
+  - Календарное планирование **индивидуальных и групповых** уроков с интервальной фильтрацией, темами и ссылками на видеозвонки.
   - Учет оплат с автоматическим пересчетом оплаченного баланса занятий (включая дельту при редактировании и откаты при удалении).
-  - Назначение домашних заданий и рецензирование сданных работ (`SUBMITTED → REVIEWED`).
+  - Назначение домашних заданий и рецензирование сданных работ (`SUBMITTED → REVIEWED`) со сводной статистикой статусов.
   - Финансовая аналитика доходов по месяцам и годам.
 
-- 👨‍🎓 **Личный кабинет ученика (`ROLE_STUDENT`)**:
-  - Регистрация по выданному репетитором инвайт-токену без открытого публичного доступа.
+- 👨‍🎓 **Личный кабинет ученика (`ROLE_STUDENT`) & Telegram Mini App**:
+  - Вход через веб-браузер или прямо из Telegram через **Telegram Mini App** с нативной валидацией `initData` по HMAC-SHA256.
+  - Самостоятельное получение кода привязки бота в личном кабинете.
+  - Мгновенные уведомления в Telegram при назначении нового урока + автоматические напоминания за 24 часа.
   - Просмотр расписания собственных уроков.
   - Просмотр домашней работы, статусов и дедлайнов.
   - Сдача ДЗ (`ASSIGNED → SUBMITTED`) с прикреплением текстового ответа, ссылок и файлов.
@@ -89,6 +97,7 @@ erDiagram
         int lesson_balance
         text notes
         varchar status
+        varchar group_name "nullable"
         varchar invite_token UK
         timestamp invite_token_expires_at
         bigint telegram_chat_id "nullable, технический ID чата"
@@ -104,6 +113,7 @@ erDiagram
         timestamp end_time
         varchar topic
         varchar meeting_url
+        varchar group_name "nullable"
         varchar status
         timestamp reminder_sent_at "nullable"
     }
@@ -216,18 +226,19 @@ stateDiagram-v2
 | `POST` | `/api/v1/auth/login` | Public | Авторизация (получение access и refresh токенов) |
 | `POST` | `/api/v1/auth/refresh` | Public | Обновление пары JWT-токенов |
 | `POST` | `/api/v1/auth/register-student` | Public | Регистрация аккаунта ученика по инвайт-токену |
+| `POST` | `/api/v1/auth/telegram-miniapp` | Public | Нативная авторизация Telegram Mini App по `initData` (HMAC-SHA256) |
 
 ### 👨‍🏫 Управление учениками (`/api/v1/students`)
 
 | Метод | Путь | Роль | Описание |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/students` | `TUTOR` | Создание карточки ученика |
+| `POST` | `/api/v1/students` | `TUTOR` | Создание карточки ученика (с поддержкой группы) |
 | `GET` | `/api/v1/students` | `TUTOR` | Список всех учеников текущего репетитора |
 | `GET` | `/api/v1/students/{id}` | `TUTOR` | Профиль ученика по ID |
-| `PUT` | `/api/v1/students/{id}` | `TUTOR` | Обновление данных ученика |
+| `PUT` | `/api/v1/students/{id}` | `TUTOR` | Обновление данных ученика (включая группу) |
 | `DELETE` | `/api/v1/students/{id}` | `TUTOR` | Удаление карточки ученика |
 | `POST` | `/api/v1/students/{id}/invite` | `TUTOR` | Генерация одноразового инвайт-токена (срок 7 дней) |
-| `POST` | `/api/v1/students/{id}/telegram-link-code` | `TUTOR` | Генерация 6-значного кода привязки Telegram (срок 15 минут) |
+| `POST` | `/api/v1/students/{id}/telegram-link-code` | `TUTOR` | Генерация 6-значного кода привязки Telegram (срок 24 часа) |
 
 > **Безопасность привязки аккаунта**: Репетитор не может вручную привязать произвольный аккаунт пользователя (`User`) к карточке ученика через `userId`. Единственный способ связать `StudentProfile` с учетной записью пользователя — безопасный инвайт-флоу: генерация одноразового токена приглашения (`POST /api/v1/students/{id}/invite`) и последующая регистрация ученика (`POST /api/v1/auth/register-student`).
 
@@ -241,7 +252,8 @@ stateDiagram-v2
 
 | Метод | Путь | Роль | Описание |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/api/v1/lessons` | `TUTOR` | Планирование нового урока |
+| `POST` | `/api/v1/lessons` | `TUTOR` | Планирование нового индивидуального урока |
+| `POST` | `/api/v1/lessons/group` | `TUTOR` | Планирование группового урока для всех активных учеников группы |
 | `GET` | `/api/v1/lessons?from=...&to=...` | `TUTOR` | Получение уроков за временной интервал |
 | `GET` | `/api/v1/lessons/{id}` | `TUTOR` | Получение урока по ID |
 | `PUT` | `/api/v1/lessons/{id}` | `TUTOR` | Редактирование времени, темы и ссылки на звонок |
@@ -265,16 +277,18 @@ stateDiagram-v2
 | `POST` | `/api/v1/homework` | `TUTOR` | Создание домашнего задания к уроку |
 | `GET` | `/api/v1/homework/student/{studentId}` | `TUTOR` | Список заданий конкретного ученика |
 | `GET` | `/api/v1/homework/{id}` | `TUTOR` | Получение задания по ID |
+| `GET` | `/api/v1/homework/stats` | `TUTOR` | Сводная статистика количества заданий репетитора по статусам |
 | `PATCH` | `/api/v1/homework/{id}/status` | `TUTOR` | Проверка задания (`SUBMITTED → REVIEWED`) |
 
 ### 🎒 Личный кабинет ученика (`/api/v1/me`)
 
 | Метод | Путь | Роль | Описание |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/me/profile` | `STUDENT` | Своя карточка (без приватных заметок репетитора) |
+| `GET` | `/api/v1/me/profile` | `STUDENT` | Своя карточка (включая статус `telegramLinked`) |
 | `GET` | `/api/v1/me/lessons?from=...&to=...` | `STUDENT` | Расписание собственных занятий |
 | `GET` | `/api/v1/me/homework` | `STUDENT` | Список своих заданий со статусами и дедлайнами |
 | `GET` | `/api/v1/me/payments` | `STUDENT` | История оплат и актуальный баланс оплаченных занятий |
+| `GET` | `/api/v1/me/telegram-code` | `STUDENT` | Генерация 6-значного кода привязки Telegram самостоятельно (срок 24 часа) |
 | `PATCH` | `/api/v1/me/homework/{id}/submit` | `STUDENT` | Сдача задания (`ASSIGNED → SUBMITTED`) с ответом |
 
 ### 📎 Вложения и файлы
@@ -314,36 +328,62 @@ telegram:
   api-url: ${TELEGRAM_API_URL:https://api.telegram.org}
 ```
 
-### 3. Сценарий привязки Telegram к профилю ученика
-1. **Генерация кода**: Репетитор в карточке ученика запрашивает код привязки:
+### 3. Сценарии привязки Telegram к профилю ученика
+
+#### Способ 1: Генерация кода репетитором
+1. Репетитор в карточке ученика запрашивает код привязки:
    ```http
    POST /api/v1/students/{id}/telegram-link-code
    Authorization: Bearer <TUTOR_ACCESS_TOKEN>
    ```
-   Сервер генерирует случайный 6-значный цифровой код (время жизни — 15 минут) и сохраняет его в `StudentProfile`. В ответе возвращаются:
+   Сервер генерирует случайный 6-значный цифровой код (время жизни — 24 часа) и сохраняет его в `StudentProfile`. В ответе возвращаются:
    ```json
    {
      "studentId": 10,
      "linkCode": "481923",
      "code": "481923",
-     "expiresAt": "2026-09-20T12:35:00Z",
-     "botUsername": "MyTutorCrmBot"
+     "expiresAt": "2026-09-21T12:35:00Z",
+     "botUsername": "studly_tutor_bot"
    }
    ```
-2. **Передача кода ученику**: Репетитор сообщает 6-значный код ученику либо дает прямую ссылку вида `https://t.me/MyTutorCrmBot?start=481923`.
-3. **Отправка кода боту**: Ученик нажимает `Start` в боте или отправляет сообщение с кодом `481923`.
-4. **Обработка Webhook**: Telegram Bot API пересылает сообщение на эндпоинт приложения `POST /api/v1/telegram/webhook`:
-   - Сервис валидирует код и срок его действия.
-   - Записывает `chatId` в `student.telegramChatId`.
-   - Очищает `telegramLinkCode` и `telegramLinkCodeExpiresAt`.
-   - Отправляет ответное сообщение через Bot API (`sendMessage`): *"Telegram успешно привязан к вашему профилю ученика! Теперь вы будете получать уведомления."*
+2. Репетитор передает код ученику либо прямую ссылку вида `https://t.me/studly_tutor_bot?start=481923`.
 
-### 4. Настройка Webhook через Telegram Bot API (Production)
+#### Способ 2: Самостоятельная генерация кода учеником
+1. Ученик в веб-кабинете открывает профиль или баннер привязки Telegram:
+   ```http
+   GET /api/v1/me/telegram-code
+   Authorization: Bearer <STUDENT_ACCESS_TOKEN>
+   ```
+   Сервер возвращает действующий или новый 6-значный код со ссылкой на бота.
+2. Ученик переходит в бота и нажимает кнопку `Start` (код передается параметром deeplink автоматически) или отправляет 6 цифр сообщением.
+
+#### Обработка привязки (Webhook):
+Telegram Bot API пересылает сообщение на эндпоинт приложения `POST /api/v1/telegram/webhook`:
+- Сервис валидирует код и срок его действия.
+- Записывает `chatId` в `student.telegramChatId`.
+- Очищает `telegramLinkCode` и `telegramLinkCodeExpiresAt`.
+- Отправляет ответное подтверждение в чат: *"Telegram успешно привязан к вашему профилю ученика! Теперь вы будете получать уведомления."*
+
+### 4. Нативная аутентификация в Telegram Mini App (TMA)
+При открытии приложения внутри Telegram веб-клиент отправляет заголовок `initData` в эндпоинт:
+```http
+POST /api/v1/auth/telegram-miniapp
+Content-Type: application/json
+
+{
+  "initData": "query_id=...&user=...&auth_date=...&hash=..."
+}
+```
+1. Бэкенд проверяет цифровую подпись данных через HMAC-SHA256 с использованием bot token.
+2. Проверяет срок свежести данных (`auth_date`).
+3. По `telegramId` пользователя находит привязанный профиль ученика и выдает пару JWT токенов (access/refresh). Ученик бесшовно авторизуется без ввода логина и пароля!
+
+### 5. Настройка Webhook через Telegram Bot API (Production)
 Telegram Bot API доставляет апдейты через вебхук **только на публичные HTTPS-адреса** с доверенным сертификатом.
 
 После развертывания приложения на сервере зарегистрируйте URL вебхука:
 ```bash
-curl -F "url=https://your-crm-domain.com/api/v1/telegram/webhook" \
+curl -F "url=https://crmfortutor.onrender.com/api/v1/telegram/webhook" \
      -F "secret_token=<TELEGRAM_WEBHOOK_SECRET>" \
      https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook
 ```
@@ -362,17 +402,16 @@ curl https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo
 curl https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/deleteWebhook
 ```
 
-### 5. Локальная разработка и тестирование
+### 6. Локальная разработка и тестирование
 
 #### Вариант A: Прямой вызов `sendMessage` (без входящего Webhook)
-Если `telegramChatId` уже сохранен в профиле (или известен ваш персональный `chatId`), бэкенд может напрямую отправлять исходящие сообщения через метод:
+Если `telegramChatId` уже сохранен в профиле, бэкенд напрямую отправляет исходящие сообщения через метод:
 ```java
 telegramService.sendMessage(chatId, "Тестовое сообщение из локального CRM");
 ```
-Для этого достаточно только корректного `TELEGRAM_BOT_TOKEN`. Входящий webhook и белый IP не требуются.
 
 #### Вариант B: Локальная эмуляция апдейтов Telegram
-Можно проверить работу контроллера и привязку кода прямым вызовом эндпоинта через `curl`:
+Можно проверить работу контроллера и привязку кода вызовом через `curl`:
 ```bash
 curl -X POST http://localhost:8081/api/v1/telegram/webhook \
   -H "Content-Type: application/json" \
@@ -389,26 +428,30 @@ curl -X POST http://localhost:8081/api/v1/telegram/webhook \
   }'
 ```
 
-#### Вариант C: Сквозное тестирование с реальным Telegram через туннель
-Для тестирования "живого" диалога с ботом на этапе локальной разработки можно пробросить локальный порт с помощью утилит туннелирования (например, [ngrok](https://ngrok.com/)):
+#### Вариант C: Сквозное тестирование с реальным Telegram через туннель (ngrok)
 ```bash
-# 1. Запустить локальный туннель на порт приложения
 ngrok http 8081
-
-# 2. Установить полученный HTTPS URL в Telegram Webhook
 curl -F "url=https://<your-subdomain>.ngrok-free.app/api/v1/telegram/webhook" \
      -F "secret_token=<TELEGRAM_WEBHOOK_SECRET>" \
      https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook
 ```
 
-### 6. Плановые напоминания об уроках (Scheduled Job)
+### 7. Система уведомлений в Telegram
+
+#### А. Мгновенные уведомления о создании урока
+При назначении индивидуального или группового занятия через [`LessonService`](src/main/java/org/akusher/crmfortutor/service/LessonService.java) сервис [`NotificationService`](src/main/java/org/akusher/crmfortutor/service/NotificationService.java) немедленно отправляет ученику сообщение:
+```text
+📅 Тебе назначен новый урок на 07.10 в 15:37!
+Тема: Подготовка к ОГЭ
+Ссылка на звонок: https://meet.google.com/xyz
+```
+
+#### Б. Плановые напоминания об уроках (Scheduled Job)
 В системе работает фоновая задача (`@EnableScheduling`, интервал по умолчанию — каждые 30 минут):
 - Находит запланированные уроки (`status = SCHEDULED`), время начала которых попадает в интервал **через 24 часа ± интервал джобы**, и напоминание по которым еще не отправлялось (`reminderSentAt IS NULL`).
-- Через [`NotificationService`](src/main/java/org/akusher/crmfortutor/service/NotificationService.java) формирует персональное сообщение вида:
+- Формирует персональное сообщение вида:
   > *"Завтра в 15:00 у тебя урок по теме Английский язык\nСсылка на звонок: https://meet.google.com/..."*
-- Отправляет уведомление в Telegram (если у профиля привязан `telegramChatId`).
 - Фиксирует факт отправки (`reminderSentAt = Instant.now()`), исключая повторные уведомления.
-- Отказоустойчивость: ошибка отправки для одного урока не прерывает работу джобы — остальные уроки продолжают обрабатываться в цикле.
 
 ---
 
@@ -627,8 +670,10 @@ Telegram Bot API отправляет события **только на пуб�
 ## 🗺 Планы развития
 
 - [x] Интеграция с Telegram Bot для уведомлений (привязка чата через 6-значный код, прием Webhook и отправка через Bot API sendMessage).
+- [x] Мгновенные уведомления в Telegram при создании уроков + автоматические 24ч напоминания.
+- [x] Поддержка Telegram Mini App (TMA) с нативной авторизацией по HMAC-SHA256 initData.
+- [x] Поддержка групповых занятий (распределение по группам, создание групповых уроков).
 - [ ] Синхронизация расписания с Google Calendar / Yandex Calendar (iCal).
 - [ ] Аутентификация через OAuth2 / Google Sign-In.
 - [ ] Подключение облачного хранилища S3 (MinIO / AWS S3 / Yandex Object Storage) через реализацию `FileStorageService`.
-- [ ] Webhook-интеграция с эквайрингами (ЮKassa / Tinkoff) для автоматического подтверждения платежей.
-- [ ] Поддержка групповых занятий (несколько учеников на один урок).
+- [ ] Webhook-интеграция с эквайрингами (ЮKassa / Tinkoff / Stripe) для автоматического подтверждения платежей.
