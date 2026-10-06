@@ -57,6 +57,8 @@ class LessonServiceTest {
     private AttachmentRepository attachmentRepository;
     @Mock
     private FileStorageService fileStorageService;
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private LessonService lessonService;

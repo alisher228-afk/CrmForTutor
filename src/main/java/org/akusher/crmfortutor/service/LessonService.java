@@ -41,6 +41,7 @@ public class LessonService {
     private final HomeworkRepository homeworkRepository;
     private final AttachmentRepository attachmentRepository;
     private final FileStorageService fileStorageService;
+    private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
     public List<LessonResponse> getLessons(LocalDateTime from, LocalDateTime to) {
@@ -114,6 +115,11 @@ public class LessonService {
                     .build();
 
             Lesson saved = lessonRepository.save(lesson);
+            try {
+                notificationService.sendLessonCreateNotification(saved);
+            } catch (Exception e) {
+                log.warn("Failed to send lesson creation notification: {}", e.getMessage());
+            }
             return List.of(lessonMapper.toResponse(saved));
         }
 
@@ -147,6 +153,13 @@ public class LessonService {
             }
 
             List<Lesson> savedLessons = lessonRepository.saveAll(lessonsToSave);
+            for (Lesson sl : savedLessons) {
+                try {
+                    notificationService.sendLessonCreateNotification(sl);
+                } catch (Exception e) {
+                    log.warn("Failed to send lesson creation notification: {}", e.getMessage());
+                }
+            }
             return lessonMapper.toResponseList(savedLessons);
         }
 

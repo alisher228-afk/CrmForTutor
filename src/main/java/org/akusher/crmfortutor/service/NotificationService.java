@@ -18,6 +18,49 @@ public class NotificationService {
 
     private final TelegramService telegramService;
 
+    public boolean sendLessonCreateNotification(Lesson lesson) {
+        if (lesson == null) {
+            log.warn("Cannot send lesson creation notification: lesson is null");
+            return false;
+        }
+
+        StudentProfile student = lesson.getStudent();
+        if (student == null) {
+            log.warn("Cannot send lesson creation notification for lesson id {}: student is null", lesson.getId());
+            return false;
+        }
+
+        Long chatId = student.getTelegramChatId();
+        if (chatId != null) {
+            String time = lesson.getStartTime() != null ? lesson.getStartTime().format(TIME_FORMATTER) : "";
+            String date = lesson.getStartTime() != null ? lesson.getStartTime().format(DateTimeFormatter.ofPattern("dd.MM")) : "";
+
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format("📅 Тебе назначен новый урок на %s в %s!", date, time));
+
+            if (StringUtils.hasText(lesson.getTopic())) {
+                sb.append("\nТема: ").append(lesson.getTopic().trim());
+            }
+            if (StringUtils.hasText(lesson.getMeetingUrl())) {
+                sb.append("\nСсылка на звонок: ").append(lesson.getMeetingUrl().trim());
+            }
+
+            boolean sent = telegramService.sendMessage(chatId, sb.toString());
+            if (sent) {
+                log.info("Sent lesson creation notification to student id {} (chatId {}) for lesson id {}",
+                        student.getId(), chatId, lesson.getId());
+            } else {
+                log.warn("Failed to send lesson creation notification to student id {} (chatId {}) for lesson id {}",
+                        student.getId(), chatId, lesson.getId());
+            }
+            return sent;
+        } else {
+            log.info("Student id {} has no telegramChatId, creation notification skipped for lesson id {}",
+                    student.getId(), lesson.getId());
+            return false;
+        }
+    }
+
     public boolean sendLessonReminder(Lesson lesson) {
         if (lesson == null) {
             log.warn("Cannot send lesson reminder: lesson is null");

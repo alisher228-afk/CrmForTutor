@@ -168,4 +168,69 @@ class NotificationServiceTest {
         assertThat(notificationService.sendLessonReminder(lessonWithoutStudent)).isFalse();
         verify(telegramService, never()).sendMessage(any(), any());
     }
+
+    @Test
+    @DisplayName("sendLessonCreateNotification - formats message with topic and sends via Telegram")
+    void sendLessonCreateNotification_Success() {
+        StudentProfile student = StudentProfile.builder()
+                .id(1L)
+                .firstName("Иван")
+                .telegramChatId(11223344L)
+                .build();
+
+        LocalDateTime startTime = LocalDateTime.of(2026, 10, 7, 15, 37);
+        Lesson lesson = Lesson.builder()
+                .id(10L)
+                .student(student)
+                .startTime(startTime)
+                .topic("Математический анализ")
+                .meetingUrl("https://meet.google.com/xyz")
+                .build();
+
+        when(telegramService.sendMessage(anyLong(), anyString())).thenReturn(true);
+
+        boolean result = notificationService.sendLessonCreateNotification(lesson);
+
+        ArgumentCaptor<Long> chatIdCaptor = ArgumentCaptor.forClass(Long.class);
+        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+
+        verify(telegramService).sendMessage(chatIdCaptor.capture(), messageCaptor.capture());
+
+        assertThat(result).isTrue();
+        assertThat(chatIdCaptor.getValue()).isEqualTo(11223344L);
+        assertThat(messageCaptor.getValue())
+                .contains("07.10")
+                .contains("15:37")
+                .contains("Математический анализ")
+                .contains("https://meet.google.com/xyz");
+    }
+
+    @Test
+    @DisplayName("sendLessonCreateNotification - student without telegramChatId skips sending")
+    void sendLessonCreateNotification_NoTelegramChatId_Skips() {
+        StudentProfile student = StudentProfile.builder()
+                .id(2L)
+                .telegramChatId(null)
+                .build();
+
+        Lesson lesson = Lesson.builder()
+                .id(11L)
+                .student(student)
+                .startTime(LocalDateTime.of(2026, 10, 7, 15, 37))
+                .build();
+
+        boolean result = notificationService.sendLessonCreateNotification(lesson);
+
+        assertThat(result).isFalse();
+        verify(telegramService, never()).sendMessage(anyLong(), anyString());
+    }
+
+    @Test
+    @DisplayName("sendLessonCreateNotification - null lesson or student handled safely")
+    void sendLessonCreateNotification_NullArgs() {
+        assertThat(notificationService.sendLessonCreateNotification(null)).isFalse();
+        Lesson lessonWithoutStudent = Lesson.builder().id(99L).build();
+        assertThat(notificationService.sendLessonCreateNotification(lessonWithoutStudent)).isFalse();
+        verify(telegramService, never()).sendMessage(any(), any());
+    }
 }
