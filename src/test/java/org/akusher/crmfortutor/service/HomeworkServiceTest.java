@@ -392,4 +392,25 @@ class HomeworkServiceTest {
         assertThat(result.get(0).getTitle()).isEqualTo("Math Homework #3");
         verify(homeworkRepository).findByStudentIdAndTutorIdWithFiltersList(2L, tutorId, HomeworkStatus.ASSIGNED, "Math");
     }
+
+    @Test
+    @DisplayName("getTutorHomeworkStats - aggregates status counts for current tutor")
+    void getTutorHomeworkStats_Success() {
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+
+        List<Object[]> counts = List.of(
+                new Object[]{HomeworkStatus.ASSIGNED, 4L},
+                new Object[]{HomeworkStatus.SUBMITTED, 2L},
+                new Object[]{HomeworkStatus.REVIEWED, 5L}
+        );
+        when(homeworkRepository.countByStatusForTutor(tutorId)).thenReturn(counts);
+
+        HomeworkStatsResponse stats = homeworkService.getTutorHomeworkStats();
+
+        assertThat(stats).isNotNull();
+        assertThat(stats.getTotalCount()).isEqualTo(11L);
+        assertThat(stats.getAssignedCount()).isEqualTo(4L);
+        assertThat(stats.getSubmittedCount()).isEqualTo(2L);
+        assertThat(stats.getReviewedCount()).isEqualTo(5L);
+    }
 }

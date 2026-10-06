@@ -135,4 +135,13 @@ public interface HomeworkRepository extends JpaRepository<Homework, Long> {
     List<Homework> findByGroupNameAndTutorId(
             @Param("groupName") String groupName,
             @Param("tutorId") Long tutorId);
+
+    @Query("""
+        SELECT h.status, COUNT(h)
+        FROM Homework h
+        WHERE h.lesson.tutor.id = :tutorId
+        GROUP BY h.status
+    """)
+    List<Object[]> countByStatusForTutor(
+            @Param("tutorId") Long tutorId);
 }

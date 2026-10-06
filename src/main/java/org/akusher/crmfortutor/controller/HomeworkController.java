@@ -74,6 +74,11 @@ public class HomeworkController {
         return ResponseEntity.ok(homeworkService.getHomeworkStatsByStudent(studentId));
     }
 
+    @GetMapping("/stats")
+    public ResponseEntity<HomeworkStatsResponse> getTutorHomeworkStats() {
+        return ResponseEntity.ok(homeworkService.getTutorHomeworkStats());
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<HomeworkResponse> getHomeworkById(@PathVariable Long id) {
         return ResponseEntity.ok(homeworkService.getHomeworkById(id));

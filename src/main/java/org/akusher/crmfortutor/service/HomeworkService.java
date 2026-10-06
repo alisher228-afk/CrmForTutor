@@ -184,6 +184,13 @@ public class HomeworkService {
     }
 
     @Transactional(readOnly = true)
+    public HomeworkStatsResponse getTutorHomeworkStats() {
+        Long tutorId = currentUserProvider.getCurrentTutorId();
+        List<Object[]> counts = homeworkRepository.countByStatusForTutor(tutorId);
+        return buildStatsResponse(counts);
+    }
+
+    @Transactional(readOnly = true)
     public List<HomeworkResponse> getHomeworkByGroup(String groupName) {
         Long tutorId = currentUserProvider.getCurrentTutorId();
         if (groupName == null || groupName.isBlank()) {

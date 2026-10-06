@@ -189,4 +189,24 @@ class HomeworkControllerTest {
                 .andExpect(jsonPath("$.submittedCount").value(3))
                 .andExpect(jsonPath("$.reviewedCount").value(7));
     }
+
+    @Test
+    @DisplayName("GET /api/v1/homework/stats - 200 OK")
+    void getTutorHomeworkStats_Success() throws Exception {
+        HomeworkStatsResponse stats = HomeworkStatsResponse.builder()
+                .totalCount(10)
+                .assignedCount(4)
+                .submittedCount(2)
+                .reviewedCount(4)
+                .build();
+
+        when(homeworkService.getTutorHomeworkStats()).thenReturn(stats);
+
+        mockMvc.perform(get("/api/v1/homework/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCount").value(10))
+                .andExpect(jsonPath("$.assignedCount").value(4))
+                .andExpect(jsonPath("$.submittedCount").value(2))
+                .andExpect(jsonPath("$.reviewedCount").value(4));
+    }
 }
