@@ -115,4 +115,11 @@ class MethodSecurityIntegrationTest {
         mockMvc.perform(get("/api/v1/students"))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    @DisplayName("Invalid token in query parameter returns 401 Unauthorized")
+    void invalidQueryParamTokenReturns401() throws Exception {
+        mockMvc.perform(get("/api/v1/students").param("token", "invalid.jwt.token"))
+                .andExpect(status().isUnauthorized());
+    }
 }
