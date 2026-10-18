@@ -8,12 +8,14 @@ import org.akusher.crmfortutor.dto.response.StudentGroupResponse;
 import org.akusher.crmfortutor.dto.response.StudentInviteResponse;
 import org.akusher.crmfortutor.dto.response.StudentResponse;
 import org.akusher.crmfortutor.dto.response.TelegramLinkCodeResponse;
+import org.akusher.crmfortutor.entity.Payment;
 import org.akusher.crmfortutor.entity.StudentProfile;
 import org.akusher.crmfortutor.entity.StudentStatus;
 import org.akusher.crmfortutor.entity.User;
 import org.akusher.crmfortutor.exception.BadRequestException;
 import org.akusher.crmfortutor.exception.ResourceNotFoundException;
 import org.akusher.crmfortutor.mapper.StudentMapper;
+import org.akusher.crmfortutor.repository.PaymentRepository;
 import org.akusher.crmfortutor.repository.StudentProfileRepository;
 import org.akusher.crmfortutor.repository.UserRepository;
 import org.akusher.crmfortutor.security.CurrentUserProvider;
@@ -22,12 +24,15 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
@@ -39,6 +44,7 @@ public class StudentService {
 
     private final StudentProfileRepository studentProfileRepository;
     private final UserRepository userRepository;
+    private final PaymentRepository paymentRepository;
     private final CurrentUserProvider currentUserProvider;
     private final StudentMapper studentMapper;
     private final TelegramProperties telegramProperties;
@@ -115,6 +121,10 @@ public class StudentService {
         StudentProfile student = studentProfileRepository.findByIdAndTutorId(id, tutorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student not found with id: " + id));
 
+        BigDecimal oldRate = student.getHourlyRate();
+        BigDecimal newRate = request.getHourlyRate();
+        int currentBalance = student.getLessonBalance() != null ? student.getLessonBalance() : 0;
+
         studentMapper.updateEntityFromDto(request, student);
 
         // Explicitly handle groupName because MapStruct IGNORE null strategy preserves old values
@@ -126,6 +136,34 @@ public class StudentService {
 
         if (request.getStatus() != null) {
             student.setStatus(request.getStatus());
+        }
+
+        // Handle lesson balance update and automatic recalculation if rate changed
+        if (request.getLessonBalance() != null) {
+            student.setLessonBalance(request.getLessonBalance());
+        } else if (newRate != null && newRate.compareTo(BigDecimal.ZERO) > 0 && currentBalance != 0) {
+            BigDecimal effectiveOldRate = oldRate;
+            if (effectiveOldRate == null || effectiveOldRate.compareTo(BigDecimal.ZERO) <= 0) {
+                // Try deriving rate from past payments if student had no rate previously
+                List<Payment> payments = paymentRepository.findByStudentId(student.getId());
+                BigDecimal totalAmount = payments.stream()
+                        .map(Payment::getAmount)
+                        .filter(Objects::nonNull)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                int totalLessons = payments.stream()
+                        .mapToInt(p -> p.getLessonsCount() != null ? p.getLessonsCount() : 0)
+                        .sum();
+                if (totalLessons > 0 && totalAmount.compareTo(BigDecimal.ZERO) > 0) {
+                    effectiveOldRate = totalAmount.divide(BigDecimal.valueOf(totalLessons), 4, RoundingMode.HALF_UP);
+                }
+            }
+
+            if (effectiveOldRate != null && effectiveOldRate.compareTo(BigDecimal.ZERO) > 0
+                    && effectiveOldRate.compareTo(newRate) != 0) {
+                BigDecimal currentMoneyEquivalent = effectiveOldRate.multiply(BigDecimal.valueOf(currentBalance));
+                int recalculatedBalance = currentMoneyEquivalent.divide(newRate, 0, RoundingMode.HALF_UP).intValue();
+                student.setLessonBalance(recalculatedBalance);
+            }
         }
 
         StudentProfile updated = studentProfileRepository.save(student);

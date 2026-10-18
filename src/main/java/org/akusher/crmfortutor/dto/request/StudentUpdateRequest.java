@@ -39,6 +39,8 @@ public class StudentUpdateRequest {
     @PositiveOrZero(message = "Hourly rate must be greater than or equal to 0")
     private BigDecimal hourlyRate;
 
+    private Integer lessonBalance;
+
     @Size(max = 100, message = "Group name must not exceed 100 characters")
     private String groupName;
 

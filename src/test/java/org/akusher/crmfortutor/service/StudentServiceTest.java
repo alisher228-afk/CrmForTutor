@@ -12,6 +12,7 @@ import org.akusher.crmfortutor.entity.User;
 import org.akusher.crmfortutor.exception.BadRequestException;
 import org.akusher.crmfortutor.exception.ResourceNotFoundException;
 import org.akusher.crmfortutor.mapper.StudentMapper;
+import org.akusher.crmfortutor.repository.PaymentRepository;
 import org.akusher.crmfortutor.repository.StudentProfileRepository;
 import org.akusher.crmfortutor.repository.UserRepository;
 import org.akusher.crmfortutor.security.CurrentUserProvider;
@@ -40,6 +41,8 @@ class StudentServiceTest {
     private StudentProfileRepository studentProfileRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private PaymentRepository paymentRepository;
     @Mock
     private CurrentUserProvider currentUserProvider;
     @Mock
@@ -213,5 +216,56 @@ class StudentServiceTest {
         assertThat(result).isNotNull();
         assertThat(student.getUser()).isNull();
         verify(studentMapper).updateEntityFromDto(request, student);
+    }
+
+    @Test
+    @DisplayName("updateStudent - recalculates lessonBalance when hourlyRate changes")
+    void updateStudent_RecalculatesBalanceOnRateChange() {
+        // Student had 10 lessons at 1000 rate (10,000 value)
+        student.setHourlyRate(new java.math.BigDecimal("1000"));
+        student.setLessonBalance(10);
+
+        StudentUpdateRequest request = StudentUpdateRequest.builder()
+                .firstName("Dmitry")
+                .hourlyRate(new java.math.BigDecimal("5000"))
+                .build();
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(studentProfileRepository.findByIdAndTutorId(10L, tutorId)).thenReturn(Optional.of(student));
+        when(studentProfileRepository.save(any(StudentProfile.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        StudentResponse response = StudentResponse.builder().id(10L).build();
+        when(studentMapper.toResponse(student)).thenReturn(response);
+
+        studentService.updateStudent(10L, request);
+
+        // 10 * 1000 = 10000; 10000 / 5000 = 2 lessons
+        assertThat(student.getLessonBalance()).isEqualTo(2);
+        verify(studentProfileRepository).save(student);
+    }
+
+    @Test
+    @DisplayName("updateStudent - uses explicit lessonBalance when provided in request")
+    void updateStudent_UsesExplicitLessonBalance() {
+        student.setHourlyRate(new java.math.BigDecimal("1000"));
+        student.setLessonBalance(10);
+
+        StudentUpdateRequest request = StudentUpdateRequest.builder()
+                .firstName("Dmitry")
+                .hourlyRate(new java.math.BigDecimal("5000"))
+                .lessonBalance(5)
+                .build();
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(studentProfileRepository.findByIdAndTutorId(10L, tutorId)).thenReturn(Optional.of(student));
+        when(studentProfileRepository.save(any(StudentProfile.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        StudentResponse response = StudentResponse.builder().id(10L).build();
+        when(studentMapper.toResponse(student)).thenReturn(response);
+
+        studentService.updateStudent(10L, request);
+
+        assertThat(student.getLessonBalance()).isEqualTo(5);
+        verify(studentProfileRepository).save(student);
     }
 }
