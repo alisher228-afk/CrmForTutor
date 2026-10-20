@@ -6,7 +6,7 @@
 [![Liquibase](https://img.shields.io/badge/Liquibase-Database%20Migrations-red?logo=liquibase)](https://www.liquibase.org/)
 [![JWT](https://img.shields.io/badge/Auth-JWT%20(JJWT)-yellow?logo=jsonwebtokens)](https://jwt.io/)
 [![OpenAPI](https://img.shields.io/badge/Documentation-Swagger%20OpenAPI-green?logo=swagger)](https://swagger.io/)
-[![Tests](https://img.shields.io/badge/Tests-218%20passed-success?logo=junit5)](https://junit.org/junit5/)
+[![Tests](https://img.shields.io/badge/Tests-225%20passed-success?logo=junit5)](https://junit.org/junit5/)
 
 > **🌐 Текущий деплой (Staging / Beta):**
 > - **Веб-приложение:** [https://studly-crm.vercel.app](https://studly-crm.vercel.app/)
