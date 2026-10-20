@@ -12,6 +12,7 @@ import org.akusher.crmfortutor.entity.User;
 import org.akusher.crmfortutor.exception.BadRequestException;
 import org.akusher.crmfortutor.exception.ResourceNotFoundException;
 import org.akusher.crmfortutor.mapper.StudentMapper;
+import org.akusher.crmfortutor.repository.LessonRepository;
 import org.akusher.crmfortutor.repository.PaymentRepository;
 import org.akusher.crmfortutor.repository.StudentProfileRepository;
 import org.akusher.crmfortutor.repository.UserRepository;
@@ -43,6 +44,8 @@ class StudentServiceTest {
     private UserRepository userRepository;
     @Mock
     private PaymentRepository paymentRepository;
+    @Mock
+    private LessonRepository lessonRepository;
     @Mock
     private CurrentUserProvider currentUserProvider;
     @Mock
@@ -325,6 +328,49 @@ class StudentServiceTest {
 
         // Derived rate = 10000 / 10 = 1000. Recalculated = 10 * 1000 / 5000 = 2.
         assertThat(student.getLessonBalance()).isEqualTo(2);
+        verify(studentProfileRepository).save(student);
+    }
+
+    @Test
+    @DisplayName("updateStudent - recalculates past payments lessonsCount and balance on rate change")
+    void updateStudent_RecalculatesPastPaymentsOnRateChange() {
+        student.setHourlyRate(new java.math.BigDecimal("1000"));
+        student.setLessonBalance(11); // 10 + 2 - 1 = 11
+
+        org.akusher.crmfortutor.entity.Payment p1 = org.akusher.crmfortutor.entity.Payment.builder()
+                .id(1L)
+                .amount(new java.math.BigDecimal("10000"))
+                .lessonsCount(10)
+                .build();
+        org.akusher.crmfortutor.entity.Payment p2 = org.akusher.crmfortutor.entity.Payment.builder()
+                .id(2L)
+                .amount(new java.math.BigDecimal("10000"))
+                .lessonsCount(2)
+                .build();
+        when(paymentRepository.findByStudentId(10L)).thenReturn(java.util.List.of(p1, p2));
+        when(lessonRepository.countByStudentIdAndStatus(10L, org.akusher.crmfortutor.entity.LessonStatus.COMPLETED)).thenReturn(1L);
+
+        StudentUpdateRequest request = StudentUpdateRequest.builder()
+                .firstName("Mukhamadzhon")
+                .hourlyRate(new java.math.BigDecimal("5000"))
+                .build();
+
+        when(currentUserProvider.getCurrentTutorId()).thenReturn(tutorId);
+        when(studentProfileRepository.findByIdAndTutorId(10L, tutorId)).thenReturn(Optional.of(student));
+        when(studentProfileRepository.save(any(StudentProfile.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        StudentResponse response = StudentResponse.builder().id(10L).build();
+        when(studentMapper.toResponse(student)).thenReturn(response);
+
+        studentService.updateStudent(10L, request);
+
+        // Old payment 1: 10000 / 5000 = 2
+        // Payment 2: 10000 / 5000 = 2
+        // Total paid: 4 lessons. 1 completed -> balance 3
+        assertThat(p1.getLessonsCount()).isEqualTo(2);
+        assertThat(p2.getLessonsCount()).isEqualTo(2);
+        assertThat(student.getLessonBalance()).isEqualTo(3);
+        verify(paymentRepository).saveAll(java.util.List.of(p1, p2));
         verify(studentProfileRepository).save(student);
     }
 }

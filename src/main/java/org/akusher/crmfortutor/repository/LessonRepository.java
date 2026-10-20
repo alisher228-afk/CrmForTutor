@@ -21,6 +21,8 @@ public interface LessonRepository extends JpaRepository<Lesson, Long>, JpaSpecif
 
     Optional<Lesson> findByIdAndTutorId(Long id, Long tutorId);
 
+    long countByStudentIdAndStatus(Long studentId, LessonStatus status);
+
     default List<Lesson> findByTutorIdAndFilters(Long tutorId, Long studentId, LocalDateTime from, LocalDateTime to) {
         Specification<Lesson> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();

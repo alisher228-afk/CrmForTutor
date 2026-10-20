@@ -8,6 +8,7 @@ import org.akusher.crmfortutor.dto.response.StudentGroupResponse;
 import org.akusher.crmfortutor.dto.response.StudentInviteResponse;
 import org.akusher.crmfortutor.dto.response.StudentResponse;
 import org.akusher.crmfortutor.dto.response.TelegramLinkCodeResponse;
+import org.akusher.crmfortutor.entity.LessonStatus;
 import org.akusher.crmfortutor.entity.Payment;
 import org.akusher.crmfortutor.entity.StudentProfile;
 import org.akusher.crmfortutor.entity.StudentStatus;
@@ -15,6 +16,7 @@ import org.akusher.crmfortutor.entity.User;
 import org.akusher.crmfortutor.exception.BadRequestException;
 import org.akusher.crmfortutor.exception.ResourceNotFoundException;
 import org.akusher.crmfortutor.mapper.StudentMapper;
+import org.akusher.crmfortutor.repository.LessonRepository;
 import org.akusher.crmfortutor.repository.PaymentRepository;
 import org.akusher.crmfortutor.repository.StudentProfileRepository;
 import org.akusher.crmfortutor.repository.UserRepository;
@@ -45,6 +47,7 @@ public class StudentService {
     private final StudentProfileRepository studentProfileRepository;
     private final UserRepository userRepository;
     private final PaymentRepository paymentRepository;
+    private final LessonRepository lessonRepository;
     private final CurrentUserProvider currentUserProvider;
     private final StudentMapper studentMapper;
     private final TelegramProperties telegramProperties;
@@ -139,35 +142,26 @@ public class StudentService {
         }
 
         // Handle lesson balance update and automatic recalculation if rate changed.
-        // Rate change always takes priority: if hourlyRate changed, recalculate the lesson
-        // balance from the money equivalent regardless of whether lessonBalance was sent in request.
+        // Rate change always takes priority: if hourlyRate changed, recalculate the past payments
+        // and lesson balance from the new hourlyRate regardless of whether lessonBalance was sent in request.
         boolean recalculated = false;
         boolean rateChanged = newRate != null && newRate.compareTo(BigDecimal.ZERO) > 0
                 && (oldRate == null || oldRate.compareTo(BigDecimal.ZERO) <= 0 || oldRate.compareTo(newRate) != 0);
 
-        if (rateChanged && currentBalance != 0) {
-            BigDecimal effectiveOldRate = oldRate;
-            if (effectiveOldRate == null || effectiveOldRate.compareTo(BigDecimal.ZERO) <= 0) {
-                // Try deriving rate from past payments if student had no rate previously
-                List<Payment> payments = paymentRepository.findByStudentId(student.getId());
-                BigDecimal totalAmount = payments.stream()
-                        .map(Payment::getAmount)
-                        .filter(Objects::nonNull)
-                        .reduce(BigDecimal.ZERO, BigDecimal::add);
-                int totalLessons = payments.stream()
-                        .mapToInt(p -> p.getLessonsCount() != null ? p.getLessonsCount() : 0)
-                        .sum();
-                if (totalLessons > 0 && totalAmount.compareTo(BigDecimal.ZERO) > 0) {
-                    effectiveOldRate = totalAmount.divide(BigDecimal.valueOf(totalLessons), 4, RoundingMode.HALF_UP);
-                }
-            }
-
-            if (effectiveOldRate != null && effectiveOldRate.compareTo(BigDecimal.ZERO) > 0
-                    && effectiveOldRate.compareTo(newRate) != 0) {
-                BigDecimal currentMoneyEquivalent = effectiveOldRate.multiply(BigDecimal.valueOf(currentBalance));
-                int recalculatedBalance = currentMoneyEquivalent.divide(newRate, 0, RoundingMode.HALF_UP).intValue();
-                student.setLessonBalance(recalculatedBalance);
+        if (rateChanged) {
+            List<Payment> payments = paymentRepository.findByStudentId(student.getId());
+            if (!payments.isEmpty()) {
+                syncStudentPaymentsAndBalance(student, payments, newRate);
                 recalculated = true;
+            } else if (currentBalance != 0) {
+                BigDecimal effectiveOldRate = oldRate;
+                if (effectiveOldRate != null && effectiveOldRate.compareTo(BigDecimal.ZERO) > 0
+                        && effectiveOldRate.compareTo(newRate) != 0) {
+                    BigDecimal currentMoneyEquivalent = effectiveOldRate.multiply(BigDecimal.valueOf(currentBalance));
+                    int recalculatedBalance = currentMoneyEquivalent.divide(newRate, 0, RoundingMode.HALF_UP).intValue();
+                    student.setLessonBalance(recalculatedBalance);
+                    recalculated = true;
+                }
             }
         }
 
@@ -177,6 +171,47 @@ public class StudentService {
 
         StudentProfile updated = studentProfileRepository.save(student);
         return studentMapper.toResponse(updated);
+    }
+
+    @Transactional
+    public void syncStudentPaymentsAndBalance(StudentProfile student, List<Payment> payments, BigDecimal targetRate) {
+        if (targetRate == null || targetRate.compareTo(BigDecimal.ZERO) <= 0 || payments == null || payments.isEmpty()) {
+            return;
+        }
+
+        int oldTotalPaid = payments.stream()
+                .mapToInt(p -> p.getLessonsCount() != null ? p.getLessonsCount() : 0)
+                .sum();
+        int currentBalance = student.getLessonBalance() != null ? student.getLessonBalance() : 0;
+
+        long completedLessons = lessonRepository.countByStudentIdAndStatus(student.getId(), LessonStatus.COMPLETED);
+        int usedLessons = completedLessons > 0
+                ? (int) completedLessons
+                : Math.max(0, oldTotalPaid - currentBalance);
+
+        int newTotalPaid = 0;
+        for (Payment p : payments) {
+            if (p.getAmount() != null && p.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+                int recalculated = p.getAmount().divide(targetRate, 0, RoundingMode.HALF_UP).intValue();
+                p.setLessonsCount(recalculated);
+                newTotalPaid += recalculated;
+            } else if (p.getLessonsCount() != null) {
+                newTotalPaid += p.getLessonsCount();
+            }
+        }
+        paymentRepository.saveAll(payments);
+
+        int newBalance = newTotalPaid - usedLessons;
+        student.setLessonBalance(newBalance);
+    }
+
+    @Transactional
+    public void syncStudentPaymentsAndBalance(StudentProfile student, BigDecimal targetRate) {
+        if (student == null || targetRate == null || targetRate.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        List<Payment> payments = paymentRepository.findByStudentId(student.getId());
+        syncStudentPaymentsAndBalance(student, payments, targetRate);
     }
 
     @Transactional
