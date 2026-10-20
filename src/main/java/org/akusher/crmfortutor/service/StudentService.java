@@ -138,10 +138,14 @@ public class StudentService {
             student.setStatus(request.getStatus());
         }
 
-        // Handle lesson balance update and automatic recalculation if rate changed
-        if (request.getLessonBalance() != null) {
-            student.setLessonBalance(request.getLessonBalance());
-        } else if (newRate != null && newRate.compareTo(BigDecimal.ZERO) > 0 && currentBalance != 0) {
+        // Handle lesson balance update and automatic recalculation if rate changed.
+        // Rate change always takes priority: if hourlyRate changed, recalculate the lesson
+        // balance from the money equivalent regardless of whether lessonBalance was sent in request.
+        boolean recalculated = false;
+        boolean rateChanged = newRate != null && newRate.compareTo(BigDecimal.ZERO) > 0
+                && (oldRate == null || oldRate.compareTo(BigDecimal.ZERO) <= 0 || oldRate.compareTo(newRate) != 0);
+
+        if (rateChanged && currentBalance != 0) {
             BigDecimal effectiveOldRate = oldRate;
             if (effectiveOldRate == null || effectiveOldRate.compareTo(BigDecimal.ZERO) <= 0) {
                 // Try deriving rate from past payments if student had no rate previously
@@ -163,7 +167,12 @@ public class StudentService {
                 BigDecimal currentMoneyEquivalent = effectiveOldRate.multiply(BigDecimal.valueOf(currentBalance));
                 int recalculatedBalance = currentMoneyEquivalent.divide(newRate, 0, RoundingMode.HALF_UP).intValue();
                 student.setLessonBalance(recalculatedBalance);
+                recalculated = true;
             }
+        }
+
+        if (!recalculated && request.getLessonBalance() != null) {
+            student.setLessonBalance(request.getLessonBalance());
         }
 
         StudentProfile updated = studentProfileRepository.save(student);
