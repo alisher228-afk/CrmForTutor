@@ -8,9 +8,10 @@
 [![OpenAPI](https://img.shields.io/badge/Documentation-Swagger%20OpenAPI-green?logo=swagger)](https://swagger.io/)
 [![Tests](https://img.shields.io/badge/Tests-225%20passed-success?logo=junit5)](https://junit.org/junit5/)
 
-> **🌐 Текущий деплой (Staging / Beta):**
-> - **Веб-приложение:** [https://studly-crm.vercel.app](https://studly-crm.vercel.app/)
-> - **API Бэкенда:** [https://crmfortutor.onrender.com](https://crmfortutor.onrender.com)
+> **🌐 Текущий деплой (Staging / Production):**
+> - **Веб-приложение (Frontend):** [https://studly-crm.vercel.app](https://studly-crm.vercel.app/)
+> - **API Бэкенда (Render):** [https://crmfortutor.onrender.com](https://crmfortutor.onrender.com)
+> - **База данных (PostgreSQL):** [Supabase](https://supabase.com/) (Session Pooler, регион Франкфурт)
 > - **Telegram Бот & Mini App:** [@studly_tutor_bot](https://t.me/studly_tutor_bot)
 > - **Swagger UI:** [https://crmfortutor.onrender.com/swagger-ui.html](https://crmfortutor.onrender.com/swagger-ui.html)
 
@@ -556,8 +557,8 @@ docker run --name crm-postgres -e POSTGRES_DB=crm_for_tutor -e POSTGRES_USER=pos
 | Переменная | Описание | Пример значения |
 | :--- | :--- | :--- |
 | `SPRING_PROFILES_ACTIVE` | Активный профиль Spring | `prod` |
-| `DB_URL` | JDBC URL к базе данных | `jdbc:postgresql://<host>:<port>/<dbname>` |
-| `DB_USERNAME` | Пользователь PostgreSQL | `postgres` |
+| `DB_URL` | JDBC URL к базе данных | `jdbc:postgresql://aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require` |
+| `DB_USERNAME` | Пользователь PostgreSQL | `postgres.[project-ref]` (или `postgres` локально) |
 | `DB_PASSWORD` | Пароль к PostgreSQL | `strong_db_password` |
 | `JWT_SECRET` | 256-битный секрет подписи JWT | `404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970` |
 | `JWT_ACCESS_EXPIRATION` | Срок жизни access-токена (мс) | `900000` (15 минут) |
@@ -573,7 +574,15 @@ docker run --name crm-postgres -e POSTGRES_DB=crm_for_tutor -e POSTGRES_USER=pos
 | `REMINDERS_CRON` | Расписание джобы напоминаний | `0 */30 * * * *` |
 
 #### Особенности для PaaS (Railway / Render / Fly.io)
-1. **База данных**: Подключите Managed PostgreSQL плагин/сервис платформы и передайте выданный JDBC URL и учетные данные в `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`.
+1. **База данных PostgreSQL**:
+   - **Рекомендуемый бесплатный провайдер**: **[Supabase](https://supabase.com/)**. В отличие от serverless-баз с лимитом процессорных часов (например, Neon, чьи бесплатные 100 CU-часов пул соединений Spring Boot `HikariCP` исчерпывает за 4 дня из-за постоянных keep-alive запросов), Supabase не ограничивает время работы соединений (предоставляя до 500 МБ хранилища).
+   - **Подключение через Session Pooler (IPv4)**: Бесплатные контейнеры на Render работают в сети IPv4, поэтому подключаться к Supabase следует через **Session Pooler** (порт `5432` или `6543`, хост `*.pooler.supabase.com`), а не через Direct connection (IPv6):
+     ```properties
+     DB_URL=jdbc:postgresql://aws-0-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require
+     DB_USERNAME=postgres.[project-ref]
+     DB_PASSWORD=your_supabase_password
+     ```
+   - **Встроенная база Render**: Бесплатная PostgreSQL от Render автоматически истекает через 30 дней после создания, поэтому для долгосрочного бесплатного размещения рекомендуется внешняя БД (Supabase) либо платный тариф Render.
 2. **Персистентное хранилище файлов (Важно)**: Контейнеры на PaaS эфемерны — при каждом новом деплое файловая система сбрасывается.
    - **Render**: Создайте **Disk** (например, размер 1–5 GB) и примонтируйте его в точку `/app/uploads`.
    - **Fly.io**: Создайте том `fly volumes create uploads_data --size 1` и укажите в `fly.toml`:
